@@ -1953,7 +1953,7 @@ private:
       return;
     }
 
-    if ((Style.isJavaScript() || Style.isCSharp()) &&
+    if ((Style.isJavaScript() || Style.isCSharp() || Style.isD()) &&
         Current.is(tok::exclaim)) {
       if (Current.Previous) {
         bool IsIdentifier =
@@ -1961,6 +1961,10 @@ private:
                 ? Keywords.IsJavaScriptIdentifier(
                       *Current.Previous, /* AcceptIdentifierName= */ true)
                 : Current.Previous->is(tok::identifier);
+        if (Style.isD() && IsIdentifier) {
+            Current.setType(TT_DTemplateCall);
+            return;
+        }
         if (IsIdentifier ||
             Current.Previous->isOneOf(
                 tok::kw_default, tok::kw_namespace, tok::r_paren, tok::r_square,
@@ -2250,8 +2254,9 @@ private:
 
   /// Determine whether ')' is ending a cast.
   bool rParenEndsCast(const FormatToken &Tok) {
-    // C-style casts are only used in C++, C# and Java.
-    if (!Style.isCSharp() && !Style.isCpp() &&
+
+    // C-style casts are only used in C++, C#, D and Java.
+    if (!Style.isCSharp() && !Style.isCpp() && !Style.isD() &&
         Style.Language != FormatStyle::LK_Java) {
       return false;
     }
@@ -2262,6 +2267,10 @@ private:
 
     if (Tok.MatchingParen->is(TT_OverloadedOperatorLParen))
       return false;
+
+    // D uses a special cast keyword.
+    if (Style.isD())
+        return Tok.MatchingParen->Previous && Tok.MatchingParen->Previous->is(Keywords.kw_cast);
 
     FormatToken *LeftOfParens = Tok.MatchingParen->getPreviousNonComment();
     if (LeftOfParens) {
@@ -3496,6 +3505,9 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
       return 1;
     if (Right.is(tok::period))
       return 500;
+  } else if (Style.isD()) {
+    if (Right.is(tok::exclaim))
+      return 500;
   }
 
   if (Right.is(tok::identifier) && Right.Next && Right.Next->is(TT_DictLiteral))
@@ -4497,6 +4509,8 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
       return false;
     }
   }
+  if (Right.is(TT_DTemplateCall))
+      return false;
   if (Left.is(TT_ImplicitStringLiteral))
     return Right.hasWhitespaceBefore();
   if (Line.Type == LT_ObjCMethodDecl) {

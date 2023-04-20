@@ -1911,6 +1911,8 @@ void UnwrappedLineParser::parseStructuralElement(
       // labels.
       if (Style.isJavaScript())
         break;
+      if (Style.isD())
+          break;
 
       auto OneTokenSoFar = [&]() {
         auto I = Line->Tokens.begin(), E = Line->Tokens.end();
@@ -3658,9 +3660,9 @@ bool UnwrappedLineParser::parseStructLike() {
   // parseRecord falls through and does not yet add an unwrapped line as a
   // record declaration or definition can start a structural element.
   parseRecord();
-  // This does not apply to Java, JavaScript and C#.
+  // This does not apply to Java, JavaScript, C# and D.
   if (Style.Language == FormatStyle::LK_Java || Style.isJavaScript() ||
-      Style.isCSharp()) {
+      Style.isCSharp() || Style.isD()) {
     if (FormatTok->is(tok::semi))
       nextToken();
     addUnwrappedLine();

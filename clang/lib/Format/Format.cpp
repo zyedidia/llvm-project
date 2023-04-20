@@ -375,6 +375,7 @@ template <> struct ScalarEnumerationTraits<FormatStyle::LanguageKind> {
     IO.enumCase(Value, "TextProto", FormatStyle::LK_TextProto);
     IO.enumCase(Value, "CSharp", FormatStyle::LK_CSharp);
     IO.enumCase(Value, "Json", FormatStyle::LK_Json);
+    IO.enumCase(Value, "D", FormatStyle::LK_D);
   }
 };
 
@@ -1494,6 +1495,8 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
     LLVMStyle.IndentCaseLabels = true;
     LLVMStyle.SpacesInContainerLiterals = false;
     break;
+  case FormatStyle::LK_D:
+    LLVMStyle.PointerAlignment = FormatStyle::PAS_Left;
   default:
     break;
   }
@@ -3705,6 +3708,10 @@ static FormatStyle::LanguageKind getLanguageByFileName(StringRef FileName) {
       FileName.endswith_insensitive(".v") ||
       FileName.endswith_insensitive(".vh")) {
     return FormatStyle::LK_Verilog;
+  }
+  if (FileName.endswith_insensitive(".d") ||
+      FileName.endswith_insensitive(".di")) {
+    return FormatStyle::LK_D;
   }
   return FormatStyle::LK_Cpp;
 }

@@ -163,6 +163,7 @@ namespace format {
   TYPE(VerilogTableItem)                                                       \
   /* those that separate ports of different types */                           \
   TYPE(VerilogTypeComma)                                                       \
+  TYPE(DTemplateCall)                                                          \
   TYPE(Unknown)
 
 /// Determines the semantic type of a syntactic token, e.g. whether "<" is a
@@ -661,6 +662,11 @@ public:
                     TT_LambdaArrow, TT_LeadingJavaAnnotation);
   }
 
+  /// Returns \c true if this is a "!" instantiating a D template.
+  bool isDTemplateInstance() const {
+      return is(tok::exclaim) && !is(TT_UnaryOperator);
+  }
+
   bool isUnaryOperator() const {
     switch (Tok.getKind()) {
     case tok::plus:
@@ -1036,6 +1042,9 @@ struct AdditionalKeywords {
     kw_when = &IdentTable.get("when");
     kw_where = &IdentTable.get("where");
 
+    // D keywords
+    kw_cast = &IdentTable.get("cast");
+
     // Verilog keywords
     kw_always = &IdentTable.get("always");
     kw_always_comb = &IdentTable.get("always_comb");
@@ -1193,6 +1202,8 @@ struct AdditionalKeywords {
          kw_set, kw_type, kw_typeof, kw_var, kw_yield,
          // Keywords from the Java section.
          kw_abstract, kw_extends, kw_implements, kw_instanceof, kw_interface});
+
+    DExtraKeywords = std::unordered_set<IdentifierInfo *>({kw_cast});
 
     // Some keywords are not included here because they don't need special
     // treatment like `showcancelled` or they should be treated as identifiers
@@ -1428,6 +1439,9 @@ struct AdditionalKeywords {
   IdentifierInfo *kw_ushort;
   IdentifierInfo *kw_when;
   IdentifierInfo *kw_where;
+
+  // D keywords
+  IdentifierInfo *kw_cast;
 
   // Verilog keywords
   IdentifierInfo *kw_always;
@@ -1843,6 +1857,9 @@ private:
 
   /// The C# keywords beyond the C++ keyword set
   std::unordered_set<IdentifierInfo *> CSharpExtraKeywords;
+
+  /// The D keywords beyond the C++ keyword set.
+  std::unordered_set<IdentifierInfo *> DExtraKeywords;
 
   /// The Verilog keywords beyond the C++ keyword set.
   std::unordered_set<IdentifierInfo *> VerilogExtraKeywords;
