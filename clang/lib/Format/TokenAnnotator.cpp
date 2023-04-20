@@ -2226,6 +2226,10 @@ private:
     if (PreviousNotConst->isSimpleTypeSpecifier())
       return true;
 
+    // enum a in D
+    if (Style.isD() && PreviousNotConst->is(tok::kw_enum))
+        return true;
+
     // type[] a in Java
     if (Style.Language == FormatStyle::LK_Java &&
         PreviousNotConst->is(tok::r_square)) {
@@ -3073,8 +3077,8 @@ void TokenAnnotator::setCommentLineLevels(
         Line->Type = LT_CommentAbovePPDirective;
       // Align comments for preprocessor lines with the # in column 0 if
       // preprocessor lines are not indented. Otherwise, align with the next
-      // line.
-      Line->Level = Style.IndentPPDirectives != FormatStyle::PPDIS_BeforeHash &&
+      // line. Don't reset alignment for D since imports may be indented.
+      Line->Level = !Style.isD() && Style.IndentPPDirectives != FormatStyle::PPDIS_BeforeHash &&
                             PPDirectiveOrImportStmt
                         ? 0
                         : NextNonCommentLine->Level;
@@ -4518,6 +4522,9 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
       return false;
     }
   } else if (Style.isD()) {
+    if (Left.isOneOf(tok::kw_extern, Keywords.kw_version) && Right.is(tok::l_paren)) {
+      return true;
+    }
     if (Right.is(TT_DTemplateCall))
       return false;
   }

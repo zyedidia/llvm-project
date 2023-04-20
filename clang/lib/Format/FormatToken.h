@@ -1044,6 +1044,7 @@ struct AdditionalKeywords {
 
     // D keywords
     kw_cast = &IdentTable.get("cast");
+    kw_version = &IdentTable.get("version");
 
     // Verilog keywords
     kw_always = &IdentTable.get("always");
@@ -1203,7 +1204,7 @@ struct AdditionalKeywords {
          // Keywords from the Java section.
          kw_abstract, kw_extends, kw_implements, kw_instanceof, kw_interface});
 
-    DExtraKeywords = std::unordered_set<IdentifierInfo *>({kw_cast});
+    DExtraKeywords = std::unordered_set<IdentifierInfo *>({kw_cast, kw_version});
 
     // Some keywords are not included here because they don't need special
     // treatment like `showcancelled` or they should be treated as identifiers
@@ -1442,6 +1443,7 @@ struct AdditionalKeywords {
 
   // D keywords
   IdentifierInfo *kw_cast;
+  IdentifierInfo *kw_version;
 
   // Verilog keywords
   IdentifierInfo *kw_always;

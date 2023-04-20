@@ -1443,7 +1443,7 @@ void UnwrappedLineParser::parseStructuralElement(
   case tok::kw_protected:
   case tok::kw_private:
     if (Style.Language == FormatStyle::LK_Java || Style.isJavaScript() ||
-        Style.isCSharp() || Style.isD()) {
+        Style.isCSharp()) {
       nextToken();
     } else {
       parseAccessSpecifier();
@@ -3206,7 +3206,8 @@ void UnwrappedLineParser::parseAccessSpecifier() {
   } else if (!FormatTok->is(tok::coloncolon) &&
              !isCOperatorFollowingVar(FormatTok->Tok.getKind())) {
     // Not a variable name nor namespace name.
-    addUnwrappedLine();
+    if (!Style.isD())
+        addUnwrappedLine();
   } else if (AccessSpecifierCandidate) {
     // Consider the access specifier to be a C identifier.
     AccessSpecifierCandidate->Tok.setKind(tok::identifier);

@@ -105,12 +105,15 @@ private:
   /// characters to the left from their level.
   int getIndentOffset(const FormatToken &RootToken) {
     if (Style.Language == FormatStyle::LK_Java || Style.isJavaScript() ||
-        Style.isCSharp() || Style.isD()) {
+        Style.isCSharp()) {
       return 0;
     }
 
+    if (Style.isD() && !(RootToken.Next && RootToken.Next->is(tok::colon)))
+      return 0;
+
     auto IsAccessModifier = [this, &RootToken]() {
-      if (RootToken.isAccessSpecifier(Style.isCpp())) {
+      if (RootToken.isAccessSpecifier(Style.isCpp() || Style.isD())) {
         return true;
       } else if (RootToken.isObjCAccessSpecifier()) {
         return true;
