@@ -1,0 +1,7 @@
+* Template arguments on structs
+* nested functions
+* enums as manifest constants
+* version/extern/attribute with ':'
+* static if
+* qualifiers like const(char)*
+* import sorting
