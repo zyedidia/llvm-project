@@ -2133,7 +2133,7 @@ ContinuationIndenter::createBreakableToken(const FormatToken &Current,
     // and JavaScript, as it requires strings to be merged using "+" which we
     // don't support.
     if (Style.Language == FormatStyle::LK_Java || Style.isJavaScript() ||
-        Style.isCSharp() || Style.isJson() || !Style.BreakStringLiterals ||
+        Style.isCSharp() || Style.isJson() || Style.isD() || !Style.BreakStringLiterals ||
         !AllowBreak) {
       return nullptr;
     }

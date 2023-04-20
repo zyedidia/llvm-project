@@ -105,7 +105,7 @@ private:
   /// characters to the left from their level.
   int getIndentOffset(const FormatToken &RootToken) {
     if (Style.Language == FormatStyle::LK_Java || Style.isJavaScript() ||
-        Style.isCSharp()) {
+        Style.isCSharp() || Style.isD()) {
       return 0;
     }
 

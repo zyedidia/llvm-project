@@ -1443,7 +1443,7 @@ void UnwrappedLineParser::parseStructuralElement(
   case tok::kw_protected:
   case tok::kw_private:
     if (Style.Language == FormatStyle::LK_Java || Style.isJavaScript() ||
-        Style.isCSharp()) {
+        Style.isCSharp() || Style.isD()) {
       nextToken();
     } else {
       parseAccessSpecifier();

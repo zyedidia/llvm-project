@@ -450,7 +450,12 @@ private:
         OpeningParen.MatchingParen = CurrentToken;
         CurrentToken->MatchingParen = &OpeningParen;
 
-        if (CurrentToken->Next && CurrentToken->Next->is(tok::l_brace) &&
+        // Template open/close in D is parentheses:
+        //   foo(template args)(function args)
+        if (Style.isD() && CurrentToken->Next && CurrentToken->Next->is(tok::l_paren)) {
+            OpeningParen.setType(TT_TemplateOpener);
+            CurrentToken->setType(TT_TemplateCloser);
+        } else if (CurrentToken->Next && CurrentToken->Next->is(tok::l_brace) &&
             OpeningParen.Previous && OpeningParen.Previous->is(tok::l_paren)) {
           // Detect the case where macros are used to generate lambdas or
           // function bodies, e.g.:
@@ -2486,7 +2491,7 @@ private:
       return TT_BinaryOperator;
 
     // && in C# must be a binary operator.
-    if (Style.isCSharp() && Tok.is(tok::ampamp))
+    if ((Style.isCSharp() || Style.isD()) && Tok.is(tok::ampamp))
       return TT_BinaryOperator;
 
     if (Style.isVerilog()) {
@@ -3614,6 +3619,10 @@ unsigned TokenAnnotator::splitPenalty(const AnnotatedLine &Line,
     return 500;
   }
 
+  // Penalize splitting D template opening, so that the parameter list can be
+  // split instead: foo(...)(...)
+  if (Style.isD() && Left.is(TT_TemplateOpener))
+    return 500;
   if (Left.is(tok::l_paren) && Style.PenaltyBreakOpenParenthesis != 0)
     return Style.PenaltyBreakOpenParenthesis;
   if (Left.is(tok::l_paren) && InFunctionDecl &&
@@ -4508,9 +4517,10 @@ bool TokenAnnotator::spaceRequiredBefore(const AnnotatedLine &Line,
          Left.endsSequence(tok::greatergreater, tok::l_brace))) {
       return false;
     }
-  }
-  if (Right.is(TT_DTemplateCall))
+  } else if (Style.isD()) {
+    if (Right.is(TT_DTemplateCall))
       return false;
+  }
   if (Left.is(TT_ImplicitStringLiteral))
     return Right.hasWhitespaceBefore();
   if (Line.Type == LT_ObjCMethodDecl) {
