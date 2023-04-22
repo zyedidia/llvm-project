@@ -1497,6 +1497,7 @@ FormatStyle getLLVMStyle(FormatStyle::LanguageKind Language) {
     break;
   case FormatStyle::LK_D:
     LLVMStyle.PointerAlignment = FormatStyle::PAS_Left;
+    break;
   default:
     break;
   }

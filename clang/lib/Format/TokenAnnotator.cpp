@@ -1072,7 +1072,7 @@ private:
         FormatToken *Prev = Tok->getPreviousNonComment();
         if (!Prev)
           break;
-        if (Prev->isOneOf(tok::r_paren, tok::kw_noexcept) ||
+        if ((Prev->isOneOf(tok::r_paren, tok::kw_noexcept) && !Line.First->isOneOf(tok::kw_extern, Keywords.kw_version)) ||
             Prev->ClosesRequiresClause) {
           Tok->setType(TT_CtorInitializerColon);
         } else if (Prev->is(tok::kw_try)) {
@@ -1083,7 +1083,11 @@ private:
           if (PrevPrev && PrevPrev->isOneOf(tok::r_paren, tok::kw_noexcept))
             Tok->setType(TT_CtorInitializerColon);
         } else {
-          Tok->setType(TT_InheritanceColon);
+          if (!Style.isD() || Line.First->isOneOf(tok::kw_struct, tok::kw_enum, tok::kw_class)) {
+            Tok->setType(TT_InheritanceColon);
+          } else {
+            Tok->setType(TT_AttributeColon);
+          }
         }
       } else if (canBeObjCSelectorComponent(*Tok->Previous) && Tok->Next &&
                  (Tok->Next->isOneOf(tok::r_paren, tok::comma) ||
