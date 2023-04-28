@@ -1,5 +1,18 @@
 # Notes for clang-format-d
 
+## Downloading
+
+I recommend cloning this repository as a shallow clone and then checking out
+the `clang-format-d` branch:
+
+```
+git clone --depth 1 https://github.com/zyedidia/llvm-project
+cd llvm-project
+git remote set-branches origin 'clang-format-d'
+git fetch --depth 1 origin clang-format-d
+git checkout clang-format-d
+```
+
 ## Building
 
 First configure the project. You will need `clang` and `lld` (or you can build
