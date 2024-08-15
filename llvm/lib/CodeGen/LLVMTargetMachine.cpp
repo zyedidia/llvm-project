@@ -171,6 +171,7 @@ bool LLVMTargetMachine::addAsmPrinter(PassManagerBase &PM,
       getTarget().createAsmPrinter(*this, std::move(*MCStreamerOrErr));
   if (!Printer)
     return true;
+  Printer->ExtAsm.Out = nullptr;
 
   PM.add(Printer);
   return false;
@@ -249,7 +250,7 @@ bool LLVMTargetMachine::addPassesToEmitFile(
 
   if (TargetPassConfig::willCompleteCodeGenPipeline()) {
     const Triple &T = getTargetTriple();
-    if (T.isVendorLFI()) {
+    if (T.isVendorLFI() && FileType == CodeGenFileType::ObjectFile) {
         if (addAsmPrinterLFI(PM, Out, DwoOut, FileType, MMIWP->getMMI().getContext()))
           return true;
     } else {

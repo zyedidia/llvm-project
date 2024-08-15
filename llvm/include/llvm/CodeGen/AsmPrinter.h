@@ -154,7 +154,7 @@ public:
 
   struct {
     std::string File;       // File containing dumped .s
-    raw_pwrite_stream *Out; // Output stream to write object to
+    raw_pwrite_stream *Out = nullptr; // Output stream to write object to
   } ExtAsm;
 
 private:

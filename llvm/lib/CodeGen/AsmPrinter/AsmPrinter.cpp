@@ -93,6 +93,8 @@
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSectionCOFF.h"
 #include "llvm/MC/MCSectionELF.h"
@@ -2591,13 +2593,7 @@ void AsmPrinter::doExtAsm() {
       abort();
   }
 
-  const unsigned OutputAsmVariant = 0;
   std::unique_ptr<MCInstrInfo> MCII(TM.getTarget().createMCInstrInfo());
-  MCInstPrinter *IP = TM.getTarget().createMCInstPrinter(TM.getTargetTriple(), OutputAsmVariant,
-          *MAI, *MCII, *MRI);
-
-  std::unique_ptr<MCCodeEmitter> CE = nullptr;
-  std::unique_ptr<MCAsmBackend> MAB = nullptr;
 
   std::string OutputString;
   raw_string_ostream Out(OutputString);
@@ -2609,7 +2605,23 @@ void AsmPrinter::doExtAsm() {
   Ctx.setObjectFileInfo(OutContext.getObjectFileInfo());
 
   std::unique_ptr<MCStreamer> MCStr;
-  MCStr.reset(TM.getTarget().createAsmStreamer(Ctx, std::move(FOut), IP, std::move(CE), std::move(MAB)));
+
+  // The following code can be used to output assembly instead of an object file.
+  // const unsigned OutputAsmVariant = 0;
+  // MCInstPrinter *IP = TM.getTarget().createMCInstPrinter(TM.getTargetTriple(), OutputAsmVariant,
+  //         *MAI, *MCII, *MRI);
+  // std::unique_ptr<MCCodeEmitter> CE = nullptr;
+  // std::unique_ptr<MCAsmBackend> MAB = nullptr;
+  // MCStr.reset(TM.getTarget().createAsmStreamer(Ctx, std::move(FOut), IP, std::move(CE), std::move(MAB)));
+
+  Ctx.setUseNamesOnTempLabels(false);
+
+  MCCodeEmitter *CE = TM.getTarget().createMCCodeEmitter(*MCII, Ctx);
+  MCAsmBackend *MAB = TM.getTarget().createMCAsmBackend(*TM.getMCSubtargetInfo(), *MRI, MCOptions);
+  MCStr.reset(TM.getTarget().createMCObjectStreamer(
+              TM.getTargetTriple(), Ctx, std::unique_ptr<MCAsmBackend>(MAB),
+              MAB->createObjectWriter(*ExtAsm.Out), std::unique_ptr<MCCodeEmitter>(CE),
+              *TM.getMCSubtargetInfo()));
 
   std::unique_ptr<MCAsmParser> Parser(
     createMCAsmParser(SrcMgr, Ctx, *MCStr, *MAI));
