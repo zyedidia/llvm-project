@@ -29,6 +29,7 @@
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FormattedStream.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 using namespace llvm;
@@ -132,16 +133,26 @@ bool LLVMTargetMachine::addAsmPrinter(PassManagerBase &PM,
                                       raw_pwrite_stream *DwoOut,
                                       CodeGenFileType FileType,
                                       MCContext &Context) {
+  Expected<sys::fs::TempFile> Temp =
+      sys::fs::TempFile::create("asm.temp-%%%%%%%.s");
+  if (!Temp)
+      return true;
+  raw_fd_ostream* Tmp = new raw_fd_ostream(Temp->FD, false);
+
   Expected<std::unique_ptr<MCStreamer>> MCStreamerOrErr =
-      createMCStreamer(Out, DwoOut, FileType, Context);
+      createMCStreamer(*Tmp, nullptr, CodeGenFileType::AssemblyFile, Context);
   if (auto Err = MCStreamerOrErr.takeError())
     return true;
 
+
   // Create the AsmPrinter, which takes ownership of AsmStreamer if successful.
-  FunctionPass *Printer =
+  AsmPrinter *Printer =
       getTarget().createAsmPrinter(*this, std::move(*MCStreamerOrErr));
   if (!Printer)
     return true;
+  Printer->ExtAsm.File = Temp->TmpName;
+  Printer->ExtAsm.Out = &Out;
+  Printer->ExtAsm.FileStream = Tmp;
 
   PM.add(Printer);
   return false;

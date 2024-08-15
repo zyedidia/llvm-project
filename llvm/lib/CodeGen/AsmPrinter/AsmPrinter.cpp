@@ -113,6 +113,7 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/VCSRevision.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
@@ -2538,7 +2539,39 @@ bool AsmPrinter::doFinalization(Module &M) {
   OwnedMLI.reset();
   OwnedMDT.reset();
 
+  if (ExtAsm.Out) {
+    doExtAsm();
+  }
+
   return false;
+}
+
+void AsmPrinter::doExtAsm() {
+  Expected<sys::fs::TempFile> Temp =
+      sys::fs::TempFile::create("rewrite.temp-%%%%%%%.s");
+  if (!Temp)
+      return;
+
+  SmallVector<StringRef, 4> Args = {
+      "/usr/local/bin/lfi-leg", ExtAsm.File,
+      "-o", Temp->TmpName,
+  };
+
+  int RC = sys::ExecuteAndWait(Args[0], Args);
+  if (RC < -1) {
+    printf("exited abnormally\n");
+  } else if (RC < 0) {
+    printf("unable to invoke\n");
+  } else if (RC > 0) {
+    printf("returned non-zero\n");
+  }
+
+  auto EBuf = MemoryBuffer::getFileAsStream(Temp->TmpName);
+  if (!EBuf)
+      return;
+  auto *Buf = EBuf->get();
+  std::string Str(Buf->getBufferStart(), Buf->getBufferEnd());
+  *ExtAsm.Out << Str;
 }
 
 MCSymbol *AsmPrinter::getMBBExceptionSym(const MachineBasicBlock &MBB) {

@@ -151,6 +151,12 @@ public:
     Debug = 2 ///< Emit .debug_frame
   };
 
+  struct {
+    std::string File;
+    raw_pwrite_stream *Out;
+    raw_fd_ostream *FileStream;
+  } ExtAsm;
+
 private:
   MCSymbol *CurrentFnEnd = nullptr;
 
@@ -266,6 +272,8 @@ public:
   // Return the exception symbol associated with the MBB section containing a
   // given basic block.
   MCSymbol *getMBBExceptionSym(const MachineBasicBlock &MBB);
+
+  void doExtAsm();
 
   /// Return the symbol to be used for the specified basic block when its
   /// address is taken.  This cannot be its normal LBB label because the block
