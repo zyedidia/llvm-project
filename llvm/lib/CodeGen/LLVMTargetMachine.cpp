@@ -128,11 +128,11 @@ addPassesToGenerateCode(LLVMTargetMachine &TM, PassManagerBase &PM,
   return PassConfig;
 }
 
-bool LLVMTargetMachine::addAsmPrinter(PassManagerBase &PM,
-                                      raw_pwrite_stream &Out,
-                                      raw_pwrite_stream *DwoOut,
-                                      CodeGenFileType FileType,
-                                      MCContext &Context) {
+bool LLVMTargetMachine::addAsmPrinterLFI(PassManagerBase &PM,
+                                         raw_pwrite_stream &Out,
+                                         raw_pwrite_stream *DwoOut,
+                                         CodeGenFileType FileType,
+                                         MCContext &Context) {
   Expected<sys::fs::TempFile> Temp =
       sys::fs::TempFile::create("asm.temp-%%%%%%%.s");
   if (!Temp)
@@ -144,7 +144,6 @@ bool LLVMTargetMachine::addAsmPrinter(PassManagerBase &PM,
   if (auto Err = MCStreamerOrErr.takeError())
     return true;
 
-
   // Create the AsmPrinter, which takes ownership of AsmStreamer if successful.
   AsmPrinter *Printer =
       getTarget().createAsmPrinter(*this, std::move(*MCStreamerOrErr));
@@ -152,7 +151,26 @@ bool LLVMTargetMachine::addAsmPrinter(PassManagerBase &PM,
     return true;
   Printer->ExtAsm.File = Temp->TmpName;
   Printer->ExtAsm.Out = &Out;
-  Printer->ExtAsm.FileStream = Tmp;
+
+  PM.add(Printer);
+  return false;
+}
+
+bool LLVMTargetMachine::addAsmPrinter(PassManagerBase &PM,
+                                      raw_pwrite_stream &Out,
+                                      raw_pwrite_stream *DwoOut,
+                                      CodeGenFileType FileType,
+                                      MCContext &Context) {
+  Expected<std::unique_ptr<MCStreamer>> MCStreamerOrErr =
+      createMCStreamer(Out, DwoOut, FileType, Context);
+  if (auto Err = MCStreamerOrErr.takeError())
+    return true;
+
+  // Create the AsmPrinter, which takes ownership of AsmStreamer if successful.
+  AsmPrinter *Printer =
+      getTarget().createAsmPrinter(*this, std::move(*MCStreamerOrErr));
+  if (!Printer)
+    return true;
 
   PM.add(Printer);
   return false;
@@ -230,8 +248,14 @@ bool LLVMTargetMachine::addPassesToEmitFile(
     return true;
 
   if (TargetPassConfig::willCompleteCodeGenPipeline()) {
-    if (addAsmPrinter(PM, Out, DwoOut, FileType, MMIWP->getMMI().getContext()))
-      return true;
+    const Triple &T = getTargetTriple();
+    if (T.isVendorLFI()) {
+        if (addAsmPrinterLFI(PM, Out, DwoOut, FileType, MMIWP->getMMI().getContext()))
+          return true;
+    } else {
+        if (addAsmPrinter(PM, Out, DwoOut, FileType, MMIWP->getMMI().getContext()))
+          return true;
+    }
   } else {
     // MIR printing is redundant with -filetype=null.
     if (FileType != CodeGenFileType::Null)

@@ -24,6 +24,7 @@
 #include "llvm/CodeGen/StackMaps.h"
 #include "llvm/DebugInfo/CodeView/CodeView.h"
 #include "llvm/IR/InlineAsm.h"
+#include "llvm/MC/MCInstrInfo.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <cstdint>
 #include <memory>
@@ -152,9 +153,8 @@ public:
   };
 
   struct {
-    std::string File;
-    raw_pwrite_stream *Out;
-    raw_fd_ostream *FileStream;
+    std::string File;       // File containing dumped .s
+    raw_pwrite_stream *Out; // Output stream to write object to
   } ExtAsm;
 
 private:
