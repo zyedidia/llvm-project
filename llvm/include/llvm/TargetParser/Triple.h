@@ -181,6 +181,8 @@ public:
   enum VendorType {
     UnknownVendor,
 
+    LFI,
+
     Apple,
     PC,
     SCEI,
@@ -809,6 +811,11 @@ public:
   }
 
   bool isVulkanOS() const { return getOS() == Triple::Vulkan; }
+
+  /// Tests whether the vendor is LFI
+  bool isVendorLFI() const {
+    return getVendor() == Triple::LFI;
+  }
 
   bool isShaderStageEnvironment() const {
     EnvironmentType Env = getEnvironment();
