@@ -138,6 +138,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <sstream>
 
 using namespace llvm;
 
@@ -2561,9 +2562,27 @@ void AsmPrinter::doExtAsm() {
   if (!Temp)
       return;
 
-  SmallVector<StringRef, 4> Args = {
-      "/usr/local/bin/lfi-leg", ExtAsm.File,
-      "-o", Temp->TmpName,
+  const char* LFILeg = std::getenv("LFILEG");
+  const char* LFIFlags = std::getenv("LFIFLAGS");
+
+  if (!LFILeg)
+      LFILeg = "lfi-leg";
+  if (!LFIFlags)
+      LFIFlags = "";
+
+  auto Prog = sys::findProgramByName(std::string(LFILeg));
+  if (!Prog) {
+      errs() << "Could not find " << LFILeg;
+      return;
+  }
+
+  std::stringstream SS;
+  SS << Prog.get() << " " << LFIFlags << " " << ExtAsm.File << " -o " << Temp->TmpName << "\n";
+  // errs() << SS.str();
+  std::string Cmd = SS.str();
+
+  SmallVector<StringRef, 3> Args = {
+      "/bin/sh", "-c",  Cmd,
   };
 
   int RC = sys::ExecuteAndWait(Args[0], Args);
@@ -2599,10 +2618,9 @@ void AsmPrinter::doExtAsm() {
   raw_string_ostream Out(OutputString);
   auto FOut = std::make_unique<formatted_raw_ostream>(Out);
 
-  MCContext Ctx(TM.getTargetTriple(), MAI, MRI.get(), TM.getMCSubtargetInfo(), &SrcMgr);
-  std::unique_ptr<MCObjectFileInfo> MOFI(
-          TM.getTarget().createMCObjectFileInfo(Ctx, /*PIC=*/false));
-  Ctx.setObjectFileInfo(OutContext.getObjectFileInfo());
+  MCContext *Ctx = new MCContext(TM.getTargetTriple(), MAI, MRI.get(), TM.getMCSubtargetInfo(), &SrcMgr, OutContext.getTargetOptions());
+  TM.getTarget().createMCObjectFileInfo(*Ctx, OutContext.getObjectFileInfo()->isPositionIndependent());
+  Ctx->setObjectFileInfo(OutContext.getObjectFileInfo());
 
   std::unique_ptr<MCStreamer> MCStr;
 
@@ -2614,17 +2632,17 @@ void AsmPrinter::doExtAsm() {
   // std::unique_ptr<MCAsmBackend> MAB = nullptr;
   // MCStr.reset(TM.getTarget().createAsmStreamer(Ctx, std::move(FOut), IP, std::move(CE), std::move(MAB)));
 
-  Ctx.setUseNamesOnTempLabels(false);
+  Ctx->setUseNamesOnTempLabels(false);
 
-  MCCodeEmitter *CE = TM.getTarget().createMCCodeEmitter(*MCII, Ctx);
+  MCCodeEmitter *CE = TM.getTarget().createMCCodeEmitter(*MCII, *Ctx);
   MCAsmBackend *MAB = TM.getTarget().createMCAsmBackend(*TM.getMCSubtargetInfo(), *MRI, MCOptions);
   MCStr.reset(TM.getTarget().createMCObjectStreamer(
-              TM.getTargetTriple(), Ctx, std::unique_ptr<MCAsmBackend>(MAB),
+              TM.getTargetTriple(), *Ctx, std::unique_ptr<MCAsmBackend>(MAB),
               MAB->createObjectWriter(*ExtAsm.Out), std::unique_ptr<MCCodeEmitter>(CE),
               *TM.getMCSubtargetInfo()));
 
   std::unique_ptr<MCAsmParser> Parser(
-    createMCAsmParser(SrcMgr, Ctx, *MCStr, *MAI));
+    createMCAsmParser(SrcMgr, *Ctx, *MCStr, *MAI));
 
   std::unique_ptr<MCInstrInfo> MII(TM.getTarget().createMCInstrInfo());
   assert(MII && "Failed to create instruction info");
@@ -2639,6 +2657,9 @@ void AsmPrinter::doExtAsm() {
   (void)Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
 
   *ExtAsm.Out << Str;
+
+  sys::fs::remove(ExtAsm.File);
+  sys::fs::remove(Temp->TmpName);
 }
 
 MCSymbol *AsmPrinter::getMBBExceptionSym(const MachineBasicBlock &MBB) {
@@ -2651,6 +2672,11 @@ MCSymbol *AsmPrinter::getMBBExceptionSym(const MachineBasicBlock &MBB) {
 void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
   this->MF = &MF;
   const Function &F = MF.getFunction();
+
+  if (TM.getTargetTriple().isVendorLFI())
+    for (auto &MBB : MF)
+      if (shouldEmitLabelForBasicBlock(MBB))
+        MBB.setAlignment(Align(16));
 
   // Record that there are split-stack functions, so we will emit a special
   // section to tell the linker.
