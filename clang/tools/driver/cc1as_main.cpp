@@ -726,15 +726,16 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
 
     std::unique_ptr<MCInstrInfo> MII(TheTarget->createMCInstrInfo());
     assert(MII && "Failed to create instruction info");
-    std::unique_ptr<MCTargetAsmParser> TAP(TheTarget->createMCAsmParser(
-                *STI, *Parser, *MII, MCOptions));
-    if (!TAP)
+    std::unique_ptr<MCTargetAsmParser> NewTAP(TheTarget->createMCAsmParser(
+                TAP->getSTI(), *Parser, *MII, MCOptions));
+    if (!NewTAP)
         report_fatal_error("External rewriting not supported by this streamer because"
                 " we don't have an asm parser for this target\n");
+    NewTAP->setAvailableFeatures(TAP->getAvailableFeatures());
 
-    Parser->setTargetParser(*TAP);
+    Parser->setTargetParser(*NewTAP);
 
-    (void)Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
+    Failed = Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
 
     sys::fs::remove(RewriteTemp->TmpName);
   }

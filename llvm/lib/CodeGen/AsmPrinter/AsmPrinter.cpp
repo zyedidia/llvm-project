@@ -2655,6 +2655,7 @@ void AsmPrinter::doExtAsm() {
   Parser->setTargetParser(*TAP);
 
   (void)Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
+  // TODO: print error and die if failed?
 
   *ExtAsm.Out << Str;
 

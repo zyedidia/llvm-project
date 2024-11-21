@@ -205,7 +205,10 @@ int DwarfInstructions<A, R>::stepWithDwarf(A &addressSpace, pint_t pc,
       // __unw_step_stage2 is not used for cross unwinding, so we use
       // __aarch64__ rather than LIBUNWIND_TARGET_AARCH64 to make sure we are
       // building for AArch64 natively.
-#if defined(__aarch64__)
+      // TODO(zby): disabled this section for now because the .arch directive
+      // inside inline asm causes issues. Plus the verifier doesn't know about
+      // MTE atm.
+#if defined(__aarch64__) && 0
       if (stage2 && cieInfo.mteTaggedFrame) {
         pint_t sp = registers.getSP();
         pint_t p = sp;
