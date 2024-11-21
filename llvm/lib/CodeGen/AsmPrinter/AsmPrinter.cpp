@@ -2578,7 +2578,7 @@ void AsmPrinter::doExtAsm() {
 
   std::stringstream SS;
   SS << Prog.get() << " " << LFIFlags << " " << "-a " << TM.getTargetTriple().getArchName().str() << " " << ExtAsm.File << " -o " << Temp->TmpName << "\n";
-  errs() << SS.str();
+  // errs() << SS.str();
   std::string Cmd = SS.str();
 
   SmallVector<StringRef, 3> Args = {
