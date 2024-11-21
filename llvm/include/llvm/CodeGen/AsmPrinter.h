@@ -273,7 +273,7 @@ public:
   // given basic block.
   MCSymbol *getMBBExceptionSym(const MachineBasicBlock &MBB);
 
-  void doExtAsm();
+  bool doExtAsm();
 
   /// Return the symbol to be used for the specified basic block when its
   /// address is taken.  This cannot be its normal LBB label because the block

@@ -2544,7 +2544,8 @@ bool AsmPrinter::doFinalization(Module &M) {
   OutStreamer->reset();
 
   if (ExtAsm.Out) {
-      doExtAsm();
+      if (doExtAsm())
+        std::exit(1); // HACK (how do I return a failure from this function?)
   }
 
   MMI = nullptr;
@@ -2556,11 +2557,13 @@ bool AsmPrinter::doFinalization(Module &M) {
   return false;
 }
 
-void AsmPrinter::doExtAsm() {
+bool AsmPrinter::doExtAsm() {
   Expected<sys::fs::TempFile> Temp =
       sys::fs::TempFile::create("rewrite.temp-%%%%%%%.s");
-  if (!Temp)
-      return;
+  if (!Temp) {
+    sys::fs::remove(ExtAsm.File);
+    return true;
+  }
 
   const char* LFILeg = std::getenv("LFILEG");
   const char* LFIFlags = std::getenv("LFIFLAGS");
@@ -2573,7 +2576,9 @@ void AsmPrinter::doExtAsm() {
   auto Prog = sys::findProgramByName(std::string(LFILeg));
   if (!Prog) {
       errs() << "Could not find " << LFILeg;
-      return;
+      sys::fs::remove(ExtAsm.File);
+      sys::fs::remove(Temp->TmpName);
+      return true;
   }
 
   std::stringstream SS;
@@ -2595,8 +2600,11 @@ void AsmPrinter::doExtAsm() {
   }
 
   auto EBuf = MemoryBuffer::getFileAsStream(Temp->TmpName);
-  if (!EBuf)
-      return;
+  if (!EBuf) {
+    sys::fs::remove(ExtAsm.File);
+    sys::fs::remove(Temp->TmpName);
+    return true;
+  }
   auto *Buf = EBuf->get();
   std::string Str(Buf->getBufferStart(), Buf->getBufferEnd());
 
@@ -2654,13 +2662,15 @@ void AsmPrinter::doExtAsm() {
 
   Parser->setTargetParser(*TAP);
 
-  (void)Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
-  // TODO: print error and die if failed?
+  bool Failed = Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
 
-  *ExtAsm.Out << Str;
+  if (!Failed)
+    *ExtAsm.Out << Str;
 
   sys::fs::remove(ExtAsm.File);
   sys::fs::remove(Temp->TmpName);
+
+  return Failed;
 }
 
 MCSymbol *AsmPrinter::getMBBExceptionSym(const MachineBasicBlock &MBB) {
