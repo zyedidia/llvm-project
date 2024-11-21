@@ -449,6 +449,35 @@ def FeatureHardenSlsIJmp
           "Harden against straight line speculation across indirect JMP instructions.">;
 
 //===----------------------------------------------------------------------===//
+// X86-LFI Subtarget features
+//===----------------------------------------------------------------------===//
+
+def FeatureLFINoSegue
+    : SubtargetFeature<
+        "lfi-segue", "HasLFINoSegue", "true",
+        "Do not use %gs for LFI memory accesses">;
+
+def FeatureLFILargeSandbox
+    : SubtargetFeature<
+        "lfi-large-sandbox", "UseLFILargeSandbox", "true",
+        "Use LFI memory accesses that allow larger than 4GiB sandboxes">;
+
+def FeatureLFIDeCl
+    : SubtargetFeature<
+        "lfi-decl", "UseLFIDeCl", "true",
+        "Use verifiably deterministic LFI instructions">;
+
+def FeatureLFIMeterTimer
+    : SubtargetFeature<
+        "lfi-meter-timer", "UseLFIMeterTimer", "true",
+        "Use timer-based LFI metering sequences">;
+
+def FeatureLFIMeterBranch
+    : SubtargetFeature<
+        "lfi-meter-branch", "UseLFIMeterBranch", "true",
+        "Use branch-based LFI metering sequences">;
+
+//===----------------------------------------------------------------------===//
 // X86 Subtarget Tuning features
 //===----------------------------------------------------------------------===//
 def TuningPreferMovmskOverVTest : SubtargetFeature<"prefer-movmsk-over-vtest",

@@ -2524,6 +2524,8 @@ void MCAsmStreamer::finishImpl() {
       emitLabel(Label);
     }
   }
+
+  OS.flush();
 }
 
 void MCAsmStreamer::emitDwarfUnitLength(uint64_t Length, const Twine &Comment) {

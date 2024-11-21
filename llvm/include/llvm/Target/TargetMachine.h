@@ -497,6 +497,12 @@ public:
                      raw_pwrite_stream *DwoOut, CodeGenFileType FileType,
                      MCContext &Context);
 
+  /// Adds an AsmPrinter pass to the pipeline that prints assembly or
+  /// machine code from the MI representation.
+  bool addAsmPrinterLFI(PassManagerBase &PM, raw_pwrite_stream &Out,
+                        raw_pwrite_stream *DwoOut, CodeGenFileType FileType,
+                        MCContext &Context);
+
   Expected<std::unique_ptr<MCStreamer>>
   createMCStreamer(raw_pwrite_stream &Out, raw_pwrite_stream *DwoOut,
                    CodeGenFileType FileType, MCContext &Ctx);

@@ -42,6 +42,7 @@ using namespace llvm;
 AArch64RegisterInfo::AArch64RegisterInfo(const Triple &TT)
     : AArch64GenRegisterInfo(AArch64::LR), TT(TT) {
   AArch64_MC::initLLVMToCVRegMapping(this);
+  IsLFI = TT.isVendorLFI();
 }
 
 /// Return whether the register needs a CFI entry. Not all unwinders may know
@@ -495,6 +496,21 @@ AArch64RegisterInfo::getStrictlyReservedRegs(const MachineFunction &MF) const {
 BitVector
 AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved = getStrictlyReservedRegs(MF);
+
+  if (IsLFI) {
+    const auto &subtarget = MF.getSubtarget<AArch64Subtarget>();
+    markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(21)); // x21
+    markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(18)); // x18
+    markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(22)); // x22
+    // x30 -- see comment below
+    if (!MF.getProperties().hasProperty(
+            MachineFunctionProperties::Property::NoVRegs))
+      markSuperRegs(Reserved, AArch64::LR);
+    if (subtarget.useLFIDeCl())
+        markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(25)); // x25
+    if (subtarget.useLFIMeterTimer() || subtarget.useLFIMeterBranch())
+        markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(23)); // x23
+  }
 
   for (size_t i = 0; i < AArch64::GPR32commonRegClass.getNumRegs(); ++i) {
     if (MF.getSubtarget<AArch64Subtarget>().isXRegisterReservedForRA(i))
