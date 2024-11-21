@@ -97,6 +97,9 @@ AArch64MCAsmInfoELF::AArch64MCAsmInfoELF(const Triple &T) {
   ExceptionsType = ExceptionHandling::DwarfCFI;
 
   HasIdentDirective = true;
+
+  if (T.isVendorLFI())
+    UseIntegratedAssembler = false;
 }
 
 AArch64MCAsmInfoMicrosoftCOFF::AArch64MCAsmInfoMicrosoftCOFF() {
