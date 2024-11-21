@@ -880,6 +880,24 @@ def FeatureHardenSlsNoComdat : SubtargetFeature<"harden-sls-nocomdat",
   "HardenSlsNoComdat", "true",
   "Generate thunk code for SLS mitigation in the normal text section">;
 
+//===----------------------------------------------------------------------===//
+// LFI-AArch64
+//===----------------------------------------------------------------------===//
+
+def FeatureLFIDeCl
+    : SubtargetFeature<
+        "lfi-decl", "UseLFIDeCl", "true",
+        "Use verifiably deterministic LFI instructions">;
+
+def FeatureLFIMeterTimer
+    : SubtargetFeature<
+        "lfi-meter-timer", "UseLFIMeterTimer", "true",
+        "Use timer-based LFI metering sequences">;
+
+def FeatureLFIMeterBranch
+    : SubtargetFeature<
+        "lfi-meter-branch", "UseLFIMeterBranch", "true",
+        "Use branch-based LFI metering sequences">;
 
 // Only intended to be used by disassemblers.
 def FeatureAll
