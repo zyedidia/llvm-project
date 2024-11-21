@@ -658,7 +658,7 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
     }
 
     std::stringstream SS;
-    SS << Prog.get() << " " << LFIFlags << " " << AsmTemp->TmpName << " -o " << RewriteTemp->TmpName << "\n";
+    SS << Prog.get() << " " << LFIFlags << " " << "-a " << triple.getArchName().str() << " " << AsmTemp->TmpName << " -o " << RewriteTemp->TmpName << "\n";
     errs() << SS.str();
     std::string Cmd = SS.str();
 

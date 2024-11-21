@@ -2577,7 +2577,7 @@ void AsmPrinter::doExtAsm() {
   }
 
   std::stringstream SS;
-  SS << Prog.get() << " " << LFIFlags << " " << ExtAsm.File << " -o " << Temp->TmpName << "\n";
+  SS << Prog.get() << " " << LFIFlags << " " << "-a " << TM.getTargetTriple().getArchName().str() << " " << ExtAsm.File << " -o " << Temp->TmpName << "\n";
   errs() << SS.str();
   std::string Cmd = SS.str();
 
