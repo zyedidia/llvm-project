@@ -640,8 +640,10 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
   if (triple.isVendorLFI()) {
     Expected<sys::fs::TempFile> RewriteTemp =
         sys::fs::TempFile::create("rewrite.temp-%%%%%%%.s");
-    if (!RewriteTemp)
-        return false;
+    if (!RewriteTemp) {
+      sys::fs::remove(AsmTemp->TmpName);
+      return false;
+    }
 
     const char* LFILeg = std::getenv("LFILEG");
     const char* LFIFlags = std::getenv("LFIFLAGS");
@@ -654,6 +656,8 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
     auto Prog = sys::findProgramByName(std::string(LFILeg));
     if (!Prog) {
         errs() << "Could not find " << LFILeg;
+        sys::fs::remove(RewriteTemp->TmpName);
+        sys::fs::remove(AsmTemp->TmpName);
         return Failed;
     }
 
@@ -676,8 +680,11 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
     }
 
     auto EBuf = MemoryBuffer::getFileAsStream(RewriteTemp->TmpName);
-    if (!EBuf)
-        return Failed;
+    if (!EBuf) {
+      sys::fs::remove(RewriteTemp->TmpName);
+      sys::fs::remove(AsmTemp->TmpName);
+      return Failed;
+    }
     auto *Buf = EBuf->get();
     std::string Str(Buf->getBufferStart(), Buf->getBufferEnd());
 
@@ -735,7 +742,8 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
 
     Parser->setTargetParser(*NewTAP);
 
-    Failed = Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
+    if (Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false))
+      Failed = true;
 
     sys::fs::remove(RewriteTemp->TmpName);
   }
