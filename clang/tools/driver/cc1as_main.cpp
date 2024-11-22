@@ -647,11 +647,17 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
 
     const char* LFILeg = std::getenv("LFILEG");
     const char* LFIFlags = std::getenv("LFIFLAGS");
+    const char* LFIDebug = std::getenv("LFIDEBUG");
 
     if (!LFILeg)
         LFILeg = "lfi-leg";
-    if (!LFIFlags)
-        LFIFlags = "";
+    if (!LFIFlags) {
+#ifdef LFI_DEFAULT_FLAGS
+      LFIFlags = LFI_DEFAULT_FLAGS;
+#else
+      LFIFlags = "";
+#endif
+    }
 
     auto Prog = sys::findProgramByName(std::string(LFILeg));
     if (!Prog) {
@@ -663,7 +669,8 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
 
     std::stringstream SS;
     SS << Prog.get() << " " << LFIFlags << " " << "-a " << triple.getArchName().str() << " " << AsmTemp->TmpName << " -o " << RewriteTemp->TmpName << "\n";
-    // errs() << SS.str();
+    if (LFIDebug)
+      errs() << SS.str();
     std::string Cmd = SS.str();
 
     SmallVector<StringRef, 3> Args = {
@@ -738,7 +745,11 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
     if (!NewTAP)
         report_fatal_error("External rewriting not supported by this streamer because"
                 " we don't have an asm parser for this target\n");
-    NewTAP->setAvailableFeatures(TAP->getAvailableFeatures());
+    // At this point, the input has already passed the initial parse so we can
+    // enable all features.
+    FeatureBitset All;
+    All.set();
+    NewTAP->setAvailableFeatures(All);
 
     Parser->setTargetParser(*NewTAP);
 

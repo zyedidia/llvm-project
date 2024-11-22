@@ -2567,11 +2567,17 @@ bool AsmPrinter::doExtAsm() {
 
   const char* LFILeg = std::getenv("LFILEG");
   const char* LFIFlags = std::getenv("LFIFLAGS");
+  const char* LFIDebug = std::getenv("LFIDEBUG");
 
   if (!LFILeg)
       LFILeg = "lfi-leg";
-  if (!LFIFlags)
-      LFIFlags = "";
+  if (!LFIFlags) {
+#ifdef LFI_DEFAULT_FLAGS
+    LFIFlags = LFI_DEFAULT_FLAGS;
+#else
+    LFIFlags = "";
+#endif
+  }
 
   auto Prog = sys::findProgramByName(std::string(LFILeg));
   if (!Prog) {
@@ -2583,7 +2589,8 @@ bool AsmPrinter::doExtAsm() {
 
   std::stringstream SS;
   SS << Prog.get() << " " << LFIFlags << " " << "-a " << TM.getTargetTriple().getArchName().str() << " " << ExtAsm.File << " -o " << Temp->TmpName << "\n";
-  // errs() << SS.str();
+  if (LFIDebug)
+    errs() << SS.str();
   std::string Cmd = SS.str();
 
   SmallVector<StringRef, 3> Args = {
@@ -2684,7 +2691,7 @@ void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
   this->MF = &MF;
   const Function &F = MF.getFunction();
 
-  if (TM.getTargetTriple().isVendorLFI()) {
+  if (TM.getTargetTriple().isVendorLFI() && TM.getTargetTriple().isX86()) {
     for (auto &MBB : MF) {
       if (shouldEmitLabelForBasicBlock(MBB)) {
         MBB.setAlignment(Align(32));
