@@ -2666,6 +2666,11 @@ bool AsmPrinter::doExtAsm() {
   if (!TAP)
       report_fatal_error("External rewriting not supported by this streamer because"
               " we don't have an asm parser for this target\n");
+  // At this point, the input has already passed the initial parse so we can
+  // enable all features.
+  FeatureBitset All;
+  All.set();
+  TAP->setAvailableFeatures(All);
 
   Parser->setTargetParser(*TAP);
 
