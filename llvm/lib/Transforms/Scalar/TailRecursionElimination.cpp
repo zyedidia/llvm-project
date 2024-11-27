@@ -245,7 +245,10 @@ static bool markTails(Function &F, OptimizationRemarkEmitter *ORE) {
 
       // Special-case operand bundles "clang.arc.attachedcall", "ptrauth", and
       // "kcfi".
+      // LFI: the CI->getNumOperands() >= 6 is needed because we reserve %r11
+      // on x86-64. See https://issuetracker.google.com/issues/42403689?pli=1
       bool IsNoTail = CI->isNoTailCall() ||
+                      CI->getNumOperands() >= 6 ||
                       CI->hasOperandBundlesOtherThan(
                           {LLVMContext::OB_clang_arc_attachedcall,
                            LLVMContext::OB_ptrauth, LLVMContext::OB_kcfi});
