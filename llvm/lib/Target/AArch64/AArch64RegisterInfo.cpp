@@ -521,8 +521,10 @@ AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
     markSuperRegs(Reserved, AArch64::W30);
     if (hasLFIFlag("--decl") || Subtarget.useLFIDeCl())
         markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(25)); // x25
-    if (hasLFIFlag("--meter") || Subtarget.useLFIMeterTimer() || Subtarget.useLFIMeterBranch())
-        markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(23)); // x23
+    if (hasLFIFlag("--meter") || Subtarget.useLFIMeterTimer() || Subtarget.useLFIMeterBranch()) {
+      markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(23)); // x23
+      markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(24)); // x24
+    }
   }
 
   for (size_t i = 0; i < AArch64::GPR32commonRegClass.getNumRegs(); ++i) {

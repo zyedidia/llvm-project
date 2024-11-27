@@ -339,6 +339,18 @@ static bool isZeroingInactiveLanes(SDValue Op) {
   }
 }
 
+static bool hasLFIFlag(std::string Flag) {
+  const char* LFIFlags = std::getenv("LFIFLAGS");
+  if (!LFIFlags) {
+#ifdef LFI_DEFAULT_FLAGS
+    LFIFlags = LFI_DEFAULT_FLAGS;
+#else
+    LFIFlags = "";
+#endif
+  }
+  return std::string(LFIFlags).find(Flag) != std::string::npos;
+}
+
 static std::tuple<SDValue, SDValue>
 extractPtrauthBlendDiscriminators(SDValue Disc, SelectionDAG *DAG) {
   SDLoc DL(Disc);
@@ -1152,7 +1164,16 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
   EnableExtLdPromotion = true;
 
   // Set required alignment.
-  setMinFunctionAlignment(Align(4));
+  if (Subtarget->getTargetTriple().isVendorLFI() && hasLFIFlag("--meter=branch")) {
+    setMinFunctionAlignment(Align(16));
+    setPrefFunctionAlignment(Align(16));
+  } else if (Subtarget->getTargetTriple().isVendorLFI() && hasLFIFlag("--meter=timer")) {
+    setMinFunctionAlignment(Align(8));
+    setPrefFunctionAlignment(Align(8));
+  } else {
+    setMinFunctionAlignment(Align(4));
+    setPrefFunctionAlignment(STI.getPrefFunctionAlignment());
+  }
   // Set preferred alignments.
 
   // Don't align loops on Windows. The SEH unwind info generation needs to
@@ -1161,7 +1182,6 @@ AArch64TargetLowering::AArch64TargetLowering(const TargetMachine &TM,
   if (!Subtarget->isTargetWindows())
     setPrefLoopAlignment(STI.getPrefLoopAlignment());
   setMaxBytesForAlignment(STI.getMaxBytesForLoopAlignment());
-  setPrefFunctionAlignment(STI.getPrefFunctionAlignment());
 
   // Only change the limit for entries in a jump table if specified by
   // the sub target, but not at the command line.

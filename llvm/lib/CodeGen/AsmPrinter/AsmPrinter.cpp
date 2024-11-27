@@ -2696,6 +2696,18 @@ MCSymbol *AsmPrinter::getMBBExceptionSym(const MachineBasicBlock &MBB) {
   return Res.first->second;
 }
 
+static bool hasLFIFlag(std::string Flag) {
+  const char* LFIFlags = std::getenv("LFIFLAGS");
+  if (!LFIFlags) {
+#ifdef LFI_DEFAULT_FLAGS
+    LFIFlags = LFI_DEFAULT_FLAGS;
+#else
+    LFIFlags = "";
+#endif
+  }
+  return std::string(LFIFlags).find(Flag) != std::string::npos;
+}
+
 void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
   this->MF = &MF;
   const Function &F = MF.getFunction();
@@ -2704,6 +2716,15 @@ void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
     for (auto &MBB : MF) {
       if (shouldEmitLabelForBasicBlock(MBB)) {
         MBB.setAlignment(Align(32));
+      }
+    }
+  } else if (TM.getTargetTriple().isVendorLFI() && hasLFIFlag("--meter")) {
+    for (auto &MBB : MF) {
+      if (shouldEmitLabelForBasicBlock(MBB)) {
+        if (hasLFIFlag("--meter=branch"))
+          MBB.setAlignment(Align(16));
+        else if (hasLFIFlag("--meter=timer"))
+          MBB.setAlignment(Align(8));
       }
     }
   }
