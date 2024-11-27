@@ -733,7 +733,7 @@ void X86AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
 
 // Never relax a jump whose target is less than 16 bytes away.
 static bool neverRelax(int64_t Amt) {
-  return Amt < 0 ? -Amt < 16 : Amt < 16;
+  return Amt != 0 && (Amt < 0 ? -Amt < 16 : Amt < 16);
 }
 
 bool X86AsmBackend::mayNeedRelaxation(const MCInst &MI,
@@ -741,9 +741,12 @@ bool X86AsmBackend::mayNeedRelaxation(const MCInst &MI,
   // For DeCl, we want to avoid relaxing short jumps that are used as part of
   // branch-based metering sequences. Without this change, short jumps inside
   // of bundle-locked sequences are always relaxed.
-  if ((MI.getOpcode() == X86::JCC_1 || MI.getOpcode() == X86::JMP_1) &&
-      neverRelax(MI.getOperand(1).getImm()))
-    return false;
+  if ((MI.getOpcode() == X86::JCC_1 || MI.getOpcode() == X86::JMP_1) && MI.getOperand(0).isExpr()) {
+    int64_t Res;
+    MI.getOperand(0).getExpr()->evaluateAsAbsolute(Res);
+    if (neverRelax(Res))
+      return false;
+  }
   unsigned Opcode = MI.getOpcode();
   unsigned SkipOperands = X86::isCCMPCC(Opcode) ? 2 : 0;
   return isRelaxableBranch(Opcode) ||
