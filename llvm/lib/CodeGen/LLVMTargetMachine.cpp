@@ -133,11 +133,12 @@ bool LLVMTargetMachine::addAsmPrinterLFI(PassManagerBase &PM,
                                          raw_pwrite_stream *DwoOut,
                                          CodeGenFileType FileType,
                                          MCContext &Context) {
-  Expected<sys::fs::TempFile> Temp =
-      sys::fs::TempFile::create("asm.temp-%%%%%%%.s");
-  if (!Temp)
-      return true;
-  raw_fd_ostream* Tmp = new raw_fd_ostream(Temp->FD, false);
+  int FD;
+  SmallVector<char, 200> Path;
+  sys::fs::createTemporaryFile("asm.temp", ".s", FD, Path);
+  // Expected<sys::fs::TempFile> Temp =
+  //     sys::fs::TempFile::create("asm.temp-%%%%%%%.s");
+  raw_fd_ostream* Tmp = new raw_fd_ostream(FD, false);
 
   Expected<std::unique_ptr<MCStreamer>> MCStreamerOrErr =
       createMCStreamer(*Tmp, nullptr, CodeGenFileType::AssemblyFile, Context);
@@ -149,7 +150,7 @@ bool LLVMTargetMachine::addAsmPrinterLFI(PassManagerBase &PM,
       getTarget().createAsmPrinter(*this, std::move(*MCStreamerOrErr));
   if (!Printer)
     return true;
-  Printer->ExtAsm.File = Temp->TmpName;
+  Printer->ExtAsm.File = Twine(Path).str();
   Printer->ExtAsm.Out = &Out;
 
   PM.add(Printer);

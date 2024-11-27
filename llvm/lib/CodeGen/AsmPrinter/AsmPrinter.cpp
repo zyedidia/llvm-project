@@ -2583,7 +2583,7 @@ bool AsmPrinter::doExtAsm() {
   if (!Prog) {
       errs() << "Could not find " << LFILeg;
       sys::fs::remove(ExtAsm.File);
-      sys::fs::remove(Temp->TmpName);
+      consumeError(Temp->discard());
       return true;
   }
 
@@ -2609,7 +2609,7 @@ bool AsmPrinter::doExtAsm() {
   auto EBuf = MemoryBuffer::getFileAsStream(Temp->TmpName);
   if (!EBuf) {
     sys::fs::remove(ExtAsm.File);
-    sys::fs::remove(Temp->TmpName);
+    consumeError(Temp->discard());
     return true;
   }
   auto *Buf = EBuf->get();
@@ -2683,8 +2683,8 @@ bool AsmPrinter::doExtAsm() {
   if (!Failed)
     *ExtAsm.Out << Str;
 
-  sys::fs::remove(ExtAsm.File);
-  sys::fs::remove(Temp->TmpName);
+  // sys::fs::remove(ExtAsm.File);
+  consumeError(Temp->discard());
 
   return Failed;
 }

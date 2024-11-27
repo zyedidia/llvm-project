@@ -641,7 +641,7 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
     Expected<sys::fs::TempFile> RewriteTemp =
         sys::fs::TempFile::create("rewrite.temp-%%%%%%%.s");
     if (!RewriteTemp) {
-      sys::fs::remove(AsmTemp->TmpName);
+      consumeError(AsmTemp->discard());
       return false;
     }
 
@@ -662,8 +662,8 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
     auto Prog = sys::findProgramByName(std::string(LFILeg));
     if (!Prog) {
         errs() << "Could not find " << LFILeg;
-        sys::fs::remove(RewriteTemp->TmpName);
-        sys::fs::remove(AsmTemp->TmpName);
+        consumeError(RewriteTemp->discard());
+        consumeError(AsmTemp->discard());
         return Failed;
     }
 
@@ -688,8 +688,8 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
 
     auto EBuf = MemoryBuffer::getFileAsStream(RewriteTemp->TmpName);
     if (!EBuf) {
-      sys::fs::remove(RewriteTemp->TmpName);
-      sys::fs::remove(AsmTemp->TmpName);
+      consumeError(RewriteTemp->discard());
+      consumeError(AsmTemp->discard());
       return Failed;
     }
     auto *Buf = EBuf->get();
@@ -762,9 +762,9 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
     if (Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false))
       Failed = true;
 
-    // sys::fs::remove(RewriteTemp->TmpName);
+    consumeError(RewriteTemp->discard());
   }
-  // sys::fs::remove(AsmTemp->TmpName);
+  consumeError(AsmTemp->discard());
 
   return Failed;
 }
