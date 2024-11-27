@@ -493,12 +493,24 @@ AArch64RegisterInfo::getStrictlyReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
+static bool hasLFIFlag(std::string Flag) {
+  const char* LFIFlags = std::getenv("LFIFLAGS");
+  if (!LFIFlags) {
+#ifdef LFI_DEFAULT_FLAGS
+    LFIFlags = LFI_DEFAULT_FLAGS;
+#else
+    LFIFlags = "";
+#endif
+  }
+  return std::string(LFIFlags).find(Flag) != std::string::npos;
+}
+
 BitVector
 AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved = getStrictlyReservedRegs(MF);
 
   if (IsLFI) {
-    const auto &subtarget = MF.getSubtarget<AArch64Subtarget>();
+    const auto &Subtarget = MF.getSubtarget<AArch64Subtarget>();
     markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(21)); // x21
     markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(18)); // x18
     markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(22)); // x22
@@ -507,9 +519,9 @@ AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
             MachineFunctionProperties::Property::NoVRegs))
       markSuperRegs(Reserved, AArch64::LR);
     markSuperRegs(Reserved, AArch64::W30);
-    if (subtarget.useLFIDeCl())
+    if (hasLFIFlag("--decl") || Subtarget.useLFIDeCl())
         markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(25)); // x25
-    if (subtarget.useLFIMeterTimer() || subtarget.useLFIMeterBranch())
+    if (hasLFIFlag("--meter") || Subtarget.useLFIMeterTimer() || Subtarget.useLFIMeterBranch())
         markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(23)); // x23
   }
 
