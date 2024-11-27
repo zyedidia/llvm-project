@@ -747,18 +747,24 @@ static bool ExecuteAssemblerImpl(AssemblerInvocation &Opts,
                 " we don't have an asm parser for this target\n");
     // At this point, the input has already passed the initial parse so we can
     // enable all features.
-    FeatureBitset All;
-    All.set();
-    NewTAP->setAvailableFeatures(All);
+    if (triple.isAArch64()) {
+      // to handle .arch/.arch_extension directives properly
+      // see: https://github.com/llvm/llvm-project/issues/117221
+      FeatureBitset All;
+      All.set();
+      NewTAP->setAvailableFeatures(All);
+    } else {
+      NewTAP->setAvailableFeatures(TAP->getAvailableFeatures());
+    }
 
     Parser->setTargetParser(*NewTAP);
 
     if (Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false))
       Failed = true;
 
-    sys::fs::remove(RewriteTemp->TmpName);
+    // sys::fs::remove(RewriteTemp->TmpName);
   }
-  sys::fs::remove(AsmTemp->TmpName);
+  // sys::fs::remove(AsmTemp->TmpName);
 
   return Failed;
 }

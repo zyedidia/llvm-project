@@ -2668,9 +2668,13 @@ bool AsmPrinter::doExtAsm() {
               " we don't have an asm parser for this target\n");
   // At this point, the input has already passed the initial parse so we can
   // enable all features.
-  FeatureBitset All;
-  All.set();
-  TAP->setAvailableFeatures(All);
+  if (TM.getTargetTriple().isAArch64()) {
+    // to handle .arch/.arch_extension directives properly
+    // see: https://github.com/llvm/llvm-project/issues/117221
+    FeatureBitset All;
+    All.set();
+    TAP->setAvailableFeatures(All);
+  }
 
   Parser->setTargetParser(*TAP);
 
