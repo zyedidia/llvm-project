@@ -516,9 +516,10 @@ AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
     markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(22)); // x22
     // x30 -- see comment below
     if (!MF.getProperties().hasProperty(
-            MachineFunctionProperties::Property::NoVRegs))
+            MachineFunctionProperties::Property::NoVRegs)) {
       markSuperRegs(Reserved, AArch64::LR);
-    markSuperRegs(Reserved, AArch64::W30);
+      markSuperRegs(Reserved, AArch64::W30);
+    }
     if (hasLFIFlag("--decl") || Subtarget.useLFIDeCl())
         markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(25)); // x25
     if (hasLFIFlag("--meter") || Subtarget.useLFIMeterTimer() || Subtarget.useLFIMeterBranch()) {
