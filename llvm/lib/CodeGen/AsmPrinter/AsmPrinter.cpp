@@ -2683,7 +2683,7 @@ bool AsmPrinter::doExtAsm() {
   if (!Failed)
     *ExtAsm.Out << Str;
 
-  // sys::fs::remove(ExtAsm.File);
+  sys::fs::remove(ExtAsm.File);
   consumeError(Temp->discard());
 
   return Failed;

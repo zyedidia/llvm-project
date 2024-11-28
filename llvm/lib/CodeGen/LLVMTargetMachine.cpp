@@ -135,7 +135,7 @@ bool LLVMTargetMachine::addAsmPrinterLFI(PassManagerBase &PM,
                                          MCContext &Context) {
   int FD;
   SmallVector<char, 200> Path;
-  sys::fs::createTemporaryFile("asm.temp", ".s", FD, Path);
+  sys::fs::createTemporaryFile("asm.temp", "s", FD, Path);
   // Expected<sys::fs::TempFile> Temp =
   //     sys::fs::TempFile::create("asm.temp-%%%%%%%.s");
   raw_fd_ostream* Tmp = new raw_fd_ostream(FD, false);
