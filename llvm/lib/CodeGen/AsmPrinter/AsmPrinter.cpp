@@ -2680,9 +2680,6 @@ bool AsmPrinter::doExtAsm() {
 
   bool Failed = Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
 
-  if (!Failed)
-    *ExtAsm.Out << Str;
-
   sys::fs::remove(ExtAsm.File);
   consumeError(Temp->discard());
 
