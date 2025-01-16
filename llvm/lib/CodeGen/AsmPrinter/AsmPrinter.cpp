@@ -1518,6 +1518,36 @@ void AsmPrinter::emitPseudoProbe(const MachineInstr &MI) {
   }
 }
 
+void AsmPrinter::emitStackArgsSection(const MachineFunction &MF) {
+  // if (!MF.getTarget().Options.EmitStackSizeSection)
+  //   return;
+
+  MCSection *StackArgsSection =
+      getObjFileLowering().getStackArgsSection(*getCurrentSection());
+  if (!StackArgsSection)
+    return;
+
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const TargetFrameLowering *FI = MF.getSubtarget().getFrameLowering();
+  int ValOffset = (FI ? FI->getOffsetOfLocalArea() : 0);
+
+  OutStreamer->pushSection();
+  OutStreamer->switchSection(StackArgsSection);
+
+  const MCSymbol *FunctionSymbol = getFunctionBegin();
+  OutStreamer->emitSymbolValue(FunctionSymbol, TM.getProgramPointerSize());
+  for (unsigned i = MFI.getObjectIndexBegin(); i != 0; ++i) {
+    int64_t Offset = MFI.getObjectOffset(i) - ValOffset;
+    int64_t ObjSize = MFI.getObjectSize(i);
+    if (Offset >= 0) {
+      OutStreamer->emitInt32(Offset);
+      OutStreamer->emitInt32(ObjSize);
+    }
+  }
+
+  OutStreamer->popSection();
+}
+
 void AsmPrinter::emitStackSizeSection(const MachineFunction &MF) {
   if (!MF.getTarget().Options.EmitStackSizeSection)
     return;
@@ -2014,6 +2044,9 @@ void AsmPrinter::emitFunctionBody() {
 
   // Emit section containing stack size metadata.
   emitStackSizeSection(*MF);
+
+  // Emit section containing stack size metadata.
+  emitStackArgsSection(*MF);
 
   // Emit .su file containing function stack size information.
   emitStackUsage(*MF);
@@ -2764,6 +2797,8 @@ void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
       F.hasFnAttribute("xray-instruction-threshold") ||
       needFuncLabels(MF, *MMI) || NeedsLocalForSize ||
       MF.getTarget().Options.EmitStackSizeSection ||
+      TM.getTargetTriple().isVendorLFI() ||
+      true ||
       MF.getTarget().Options.BBAddrMap || MF.hasBBLabels()) {
     CurrentFnBegin = createTempSymbol("func_begin");
     if (NeedsLocalForSize)
