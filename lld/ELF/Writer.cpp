@@ -2797,7 +2797,8 @@ template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
     // Fill the last page.
     for (PhdrEntry *p : part.phdrs)
       if (p->p_type == PT_LOAD && (p->p_flags & PF_X))
-        fillTrap(Out::bufferStart,
+        fillTrap(Out::bufferStart +
+                     alignDown(p->firstSec->offset + p->p_filesz, 4),
                  Out::bufferStart +
                      alignToPowerOf2(p->firstSec->offset + p->p_filesz,
                                      config->maxPageSize));
