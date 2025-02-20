@@ -296,7 +296,11 @@ void MCELFStreamer::emitCommonSymbol(MCSymbol *S, uint64_t Size,
 }
 
 void MCELFStreamer::emitELFSize(MCSymbol *Symbol, const MCExpr *Value) {
-  cast<MCSymbolELF>(Symbol)->setSize(Value);
+  if (Value->getKind() == MCExpr::Constant) {
+    cast<MCSymbolELF>(Symbol)->setSize(Value);
+  } else {
+    cast<MCSymbolELF>(Symbol)->setSize(0);
+  }
 }
 
 void MCELFStreamer::emitELFSymverDirective(const MCSymbol *OriginalSym,

@@ -592,6 +592,8 @@ static void AttemptToFoldSymbolOffsetDifference(
   if (!A || !B)
     return;
 
+  return;
+
   const MCSymbol &SA = A->getSymbol();
   const MCSymbol &SB = B->getSymbol();
 
