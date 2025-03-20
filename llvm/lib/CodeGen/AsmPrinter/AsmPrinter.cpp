@@ -1536,6 +1536,13 @@ void AsmPrinter::emitStackArgsSection(const MachineFunction &MF) {
 
   const MCSymbol *FunctionSymbol = getFunctionBegin();
   OutStreamer->emitSymbolValue(FunctionSymbol, TM.getProgramPointerSize());
+  uint32_t Count = 0;
+  for (unsigned i = MFI.getObjectIndexBegin(); i != 0; ++i) {
+    int64_t Offset = MFI.getObjectOffset(i) - ValOffset;
+    if (Offset >= 0)
+      Count++;
+  }
+  OutStreamer->emitInt32(Count);
   for (unsigned i = MFI.getObjectIndexBegin(); i != 0; ++i) {
     int64_t Offset = MFI.getObjectOffset(i) - ValOffset;
     int64_t ObjSize = MFI.getObjectSize(i);
