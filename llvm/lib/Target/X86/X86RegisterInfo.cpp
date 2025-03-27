@@ -35,6 +35,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
+#include "llvm/TargetParser/Triple.h"
 
 using namespace llvm;
 
@@ -55,6 +56,7 @@ X86RegisterInfo::X86RegisterInfo(const Triple &TT)
   // Cache some information.
   Is64Bit = TT.isArch64Bit();
   IsWin64 = Is64Bit && TT.isOSWindows();
+  IsLFI = TT.isVendorLFI();
 
   // Use a callee-saved register as the base pointer.  These registers must
   // not conflict with any ABI requirements.  For example, in 32-bit mode PIC
@@ -533,6 +535,18 @@ const uint32_t *X86RegisterInfo::getDarwinTLSCallPreservedMask() const {
   return CSR_64_TLS_Darwin_RegMask;
 }
 
+static bool hasLFIFlag(std::string Flag) {
+  const char* LFIFlags = std::getenv("LFIFLAGS");
+  if (!LFIFlags) {
+#ifdef LFI_DEFAULT_FLAGS
+    LFIFlags = LFI_DEFAULT_FLAGS;
+#else
+    LFIFlags = "";
+#endif
+  }
+  return std::string(LFIFlags).find(Flag) != std::string::npos;
+}
+
 BitVector X86RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
   const X86FrameLowering *TFI = getFrameLowering(MF);
@@ -545,6 +559,17 @@ BitVector X86RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
 
   // Set the SIMD floating point control register as reserved.
   Reserved.set(X86::MXCSR);
+
+  if (IsLFI) {
+    for (const MCPhysReg &SubReg : subregs_inclusive(X86::R11)) // scratch
+      Reserved.set(SubReg);
+    for (const MCPhysReg &SubReg : subregs_inclusive(X86::R14)) // base
+      Reserved.set(SubReg);
+
+    if (hasLFIFlag("--p2size=0"))
+      for (const MCPhysReg &SubReg : subregs_inclusive(X86::R15)) // mask
+        Reserved.set(SubReg);
+  }
 
   // Set the stack-pointer register and its aliases as reserved.
   for (const MCPhysReg &SubReg : subregs_inclusive(X86::RSP))
