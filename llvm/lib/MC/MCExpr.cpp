@@ -592,7 +592,7 @@ static void AttemptToFoldSymbolOffsetDifference(
   if (!A || !B)
     return;
 
-  return;
+  // return;
 
   const MCSymbol &SA = A->getSymbol();
   const MCSymbol &SB = B->getSymbol();
@@ -630,6 +630,7 @@ static void AttemptToFoldSymbolOffsetDifference(
   bool Layout = Asm->hasLayout();
   if (Layout && (InSet || !SecA.hasInstructions() ||
                  !(Asm->getContext().getTargetTriple().isRISCV() ||
+                   Asm->getContext().getTargetTriple().isAArch64() ||
                    Asm->getContext().getTargetTriple().isLoongArch()))) {
     // If both symbols are in the same fragment, return the difference of their
     // offsets. canGetFragmentOffset(FA) may be false.
@@ -679,7 +680,7 @@ static void AttemptToFoldSymbolOffsetDifference(
     bool BBeforeRelax = false, AAfterRelax = false;
     for (auto FI = FB; FI; FI = FI->getNext()) {
       auto DF = dyn_cast<MCDataFragment>(FI);
-      if (DF && DF->isLinkerRelaxable()) {
+      if (DF && (DF->isLinkerRelaxable() || true)) {
         if (&*FI != FB || SBOffset != DF->getContents().size())
           BBeforeRelax = true;
         if (&*FI != FA || SAOffset == DF->getContents().size())

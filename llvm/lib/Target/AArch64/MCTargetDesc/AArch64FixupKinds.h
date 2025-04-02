@@ -9,6 +9,7 @@
 #ifndef LLVM_LIB_TARGET_AARCH64_MCTARGETDESC_AARCH64FIXUPKINDS_H
 #define LLVM_LIB_TARGET_AARCH64_MCTARGETDESC_AARCH64FIXUPKINDS_H
 
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCFixup.h"
 
 namespace llvm {
@@ -64,6 +65,30 @@ enum Fixups {
   LastTargetFixupKind,
   NumTargetFixupKinds = LastTargetFixupKind - FirstTargetFixupKind
 };
+
+static inline std::pair<MCFixupKind, MCFixupKind>
+getRelocPairForSize(unsigned Size) {
+  switch (Size) {
+  default:
+    llvm_unreachable("unsupported fixup size");
+  case 1:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_ADD8),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_SUB8));
+  case 2:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_ADD16),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_SUB16));
+  case 4:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_ADD32),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_SUB32));
+  case 8:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_ADD64),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_AARCH64_SUB64));
+  }
+}
 
 } // end namespace AArch64
 } // end namespace llvm

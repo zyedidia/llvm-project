@@ -459,7 +459,8 @@ unsigned AArch64ELFObjectWriter::getRelocType(MCContext &Ctx,
 bool AArch64ELFObjectWriter::needsRelocateWithSymbol(const MCValue &Val,
                                                      const MCSymbol &,
                                                      unsigned) const {
-  return (Val.getRefKind() & AArch64MCExpr::VK_GOT) == AArch64MCExpr::VK_GOT;
+  return true;
+  // return (Val.getRefKind() & AArch64MCExpr::VK_GOT) == AArch64MCExpr::VK_GOT;
 }
 
 MCSectionELF *

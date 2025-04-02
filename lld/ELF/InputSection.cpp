@@ -724,6 +724,8 @@ uint64_t InputSectionBase::getRelocTargetVA(const InputFile *file, RelType type,
   case R_RELAX_TLS_LD_TO_LE_ABS:
   case R_RELAX_GOT_PC_NOPIC:
   case R_AARCH64_AUTH:
+  case R_AARCH64_ADD:
+  case R_AARCH64_LEB128:
   case R_RISCV_ADD:
   case R_RISCV_LEB128:
     return sym.getVA(a);
@@ -1057,7 +1059,7 @@ void InputSection::relocateNonAlloc(uint8_t *buf, Relocs<RelTy> rels) {
     // R_ABS/R_DTPREL and some other relocations can be used from non-SHF_ALLOC
     // sections.
     if (LLVM_LIKELY(expr == R_ABS) || expr == R_DTPREL || expr == R_GOTPLTREL ||
-        expr == R_RISCV_ADD) {
+        expr == R_RISCV_ADD || expr == R_AARCH64_ADD) {
       target.relocateNoSym(bufLoc, type, SignExtend64<bits>(sym.getVA(addend)));
       continue;
     }

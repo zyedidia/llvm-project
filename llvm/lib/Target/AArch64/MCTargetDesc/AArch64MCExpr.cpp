@@ -103,7 +103,7 @@ MCFragment *AArch64MCExpr::findAssociatedFragment() const {
 bool AArch64MCExpr::evaluateAsRelocatableImpl(MCValue &Res,
                                               const MCAssembler *Asm,
                                               const MCFixup *Fixup) const {
-  if (!getSubExpr()->evaluateAsRelocatable(Res, Asm, Fixup))
+  if (!getSubExpr()->evaluateAsRelocatable(Res, nullptr, nullptr))
     return false;
 
   Res =

@@ -12,6 +12,7 @@
 #include "Utils/AArch64BaseInfo.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/MC/MCAsmBackend.h"
+#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDirectives.h"
@@ -25,7 +26,10 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Endian.h"
+#include "llvm/Support/EndianStream.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/TargetParser/Triple.h"
 using namespace llvm;
@@ -94,10 +98,19 @@ public:
                   uint64_t Value, bool IsResolved,
                   const MCSubtargetInfo *STI) const override;
 
+  // bool mayNeedRelaxation(const MCInst &Inst,
+  //                        const MCSubtargetInfo &STI) const override;
+
   bool fixupNeedsRelaxation(const MCFixup &Fixup,
                             uint64_t Value) const override;
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override;
+  bool relaxDwarfLineAddr(const MCAssembler &Asm, MCDwarfLineAddrFragment &DF,
+                          bool &WasRelaxed) const override;
+  bool relaxDwarfCFA(const MCAssembler &Asm, MCDwarfCallFrameFragment &DF,
+                     bool &WasRelaxed) const override;
+  std::pair<bool, bool> relaxLEB128(const MCAssembler &Asm, MCLEBFragment &LF,
+                                    int64_t &Value) const override;
   bool writeNopData(raw_ostream &OS, uint64_t Count,
                     const MCSubtargetInfo *STI) const override;
 
@@ -531,6 +544,11 @@ void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
   }
 }
 
+// bool AArch64AsmBackend::mayNeedRelaxation(const MCInst &Inst,
+//                                         const MCSubtargetInfo &STI) const {
+//   return true;
+// }
+
 bool AArch64AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
                                              uint64_t Value) const {
   // FIXME:  This isn't correct for AArch64. Just moving the "generic" logic
@@ -538,6 +556,145 @@ bool AArch64AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
   //
   // Relax if the value is too big for a (signed) i8.
   return int64_t(Value) != int64_t(int8_t(Value));
+}
+
+bool AArch64AsmBackend::relaxDwarfLineAddr(const MCAssembler &Asm,
+                                         MCDwarfLineAddrFragment &DF,
+                                         bool &WasRelaxed) const {
+  MCContext &C = Asm.getContext();
+
+  int64_t LineDelta = DF.getLineDelta();
+  const MCExpr &AddrDelta = DF.getAddrDelta();
+  SmallVectorImpl<char> &Data = DF.getContents();
+  SmallVectorImpl<MCFixup> &Fixups = DF.getFixups();
+  size_t OldSize = Data.size();
+
+  int64_t Value;
+  [[maybe_unused]] bool IsAbsolute =
+      AddrDelta.evaluateKnownAbsolute(Value, Asm);
+  assert(IsAbsolute && "CFA with invalid expression");
+
+  Data.clear();
+  Fixups.clear();
+  raw_svector_ostream OS(Data);
+
+  // INT64_MAX is a signal that this is actually a DW_LNE_end_sequence.
+  if (LineDelta != INT64_MAX) {
+    OS << uint8_t(dwarf::DW_LNS_advance_line);
+    encodeSLEB128(LineDelta, OS);
+  }
+
+  unsigned Offset;
+  std::pair<MCFixupKind, MCFixupKind> Fixup;
+
+  // According to the DWARF specification, the `DW_LNS_fixed_advance_pc` opcode
+  // takes a single unsigned half (unencoded) operand. The maximum encodable
+  // value is therefore 65535.  Set a conservative upper bound for relaxation.
+  if (Value > 60000) {
+    unsigned PtrSize = C.getAsmInfo()->getCodePointerSize();
+
+    OS << uint8_t(dwarf::DW_LNS_extended_op);
+    encodeULEB128(PtrSize + 1, OS);
+
+    OS << uint8_t(dwarf::DW_LNE_set_address);
+    Offset = OS.tell();
+    assert((PtrSize == 4 || PtrSize == 8) && "Unexpected pointer size");
+    Fixup = AArch64::getRelocPairForSize(PtrSize);
+    OS.write_zeros(PtrSize);
+  } else {
+    OS << uint8_t(dwarf::DW_LNS_fixed_advance_pc);
+    Offset = OS.tell();
+    Fixup = AArch64::getRelocPairForSize(2);
+    support::endian::write<uint16_t>(OS, 0, llvm::endianness::little);
+  }
+
+  const MCBinaryExpr &MBE = cast<MCBinaryExpr>(AddrDelta);
+  Fixups.push_back(MCFixup::create(Offset, MBE.getLHS(), std::get<0>(Fixup)));
+  Fixups.push_back(MCFixup::create(Offset, MBE.getRHS(), std::get<1>(Fixup)));
+
+  if (LineDelta == INT64_MAX) {
+    OS << uint8_t(dwarf::DW_LNS_extended_op);
+    OS << uint8_t(1);
+    OS << uint8_t(dwarf::DW_LNE_end_sequence);
+  } else {
+    OS << uint8_t(dwarf::DW_LNS_copy);
+  }
+
+  WasRelaxed = OldSize != Data.size();
+  return true;
+}
+
+bool AArch64AsmBackend::relaxDwarfCFA(const MCAssembler &Asm,
+                                    MCDwarfCallFrameFragment &DF,
+                                    bool &WasRelaxed) const {
+  const MCExpr &AddrDelta = DF.getAddrDelta();
+  SmallVectorImpl<char> &Data = DF.getContents();
+  SmallVectorImpl<MCFixup> &Fixups = DF.getFixups();
+  size_t OldSize = Data.size();
+
+  int64_t Value;
+  if (AddrDelta.evaluateAsAbsolute(Value, Asm))
+    return false;
+  [[maybe_unused]] bool IsAbsolute =
+      AddrDelta.evaluateKnownAbsolute(Value, Asm);
+  assert(IsAbsolute && "CFA with invalid expression");
+
+  Data.clear();
+  Fixups.clear();
+  raw_svector_ostream OS(Data);
+
+  assert(Asm.getContext().getAsmInfo()->getMinInstAlignment() == 1 &&
+         "expected 1-byte alignment");
+  if (Value == 0) {
+    WasRelaxed = OldSize != Data.size();
+    return true;
+  }
+
+  auto AddFixups = [&Fixups, &AddrDelta](unsigned Offset,
+                                         std::pair<unsigned, unsigned> Fixup) {
+    const MCBinaryExpr &MBE = cast<MCBinaryExpr>(AddrDelta);
+    Fixups.push_back(
+        MCFixup::create(Offset, MBE.getLHS(),
+                        static_cast<MCFixupKind>(FirstLiteralRelocationKind +
+                                                 std::get<0>(Fixup))));
+    Fixups.push_back(
+        MCFixup::create(Offset, MBE.getRHS(),
+                        static_cast<MCFixupKind>(FirstLiteralRelocationKind +
+                                                 std::get<1>(Fixup))));
+  };
+
+  if (isUIntN(6, Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc);
+    AddFixups(0, {ELF::R_AARCH64_SET6, ELF::R_AARCH64_SUB6});
+  } else if (isUInt<8>(Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc1);
+    support::endian::write<uint8_t>(OS, 0, llvm::endianness::little);
+    AddFixups(1, {ELF::R_AARCH64_SET8, ELF::R_AARCH64_SUB8});
+  } else if (isUInt<16>(Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc2);
+    support::endian::write<uint16_t>(OS, 0, llvm::endianness::little);
+    AddFixups(1, {ELF::R_AARCH64_SET16, ELF::R_AARCH64_SUB16});
+  } else if (isUInt<32>(Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc4);
+    support::endian::write<uint32_t>(OS, 0, llvm::endianness::little);
+    AddFixups(1, {ELF::R_AARCH64_SET32, ELF::R_AARCH64_SUB32});
+  } else {
+    llvm_unreachable("unsupported CFA encoding");
+  }
+
+  WasRelaxed = OldSize != Data.size();
+  return true;
+}
+
+std::pair<bool, bool> AArch64AsmBackend::relaxLEB128(const MCAssembler &Asm,
+                                                   MCLEBFragment &LF,
+                                                   int64_t &Value) const {
+  if (LF.isSigned())
+    return std::make_pair(false, false);
+  const MCExpr &Expr = LF.getValue();
+  LF.getFixups().push_back(
+      MCFixup::create(0, &Expr, FK_Data_leb128, Expr.getLoc()));
+  return std::make_pair(Expr.evaluateKnownAbsolute(Value, Asm), false);
 }
 
 void AArch64AsmBackend::relaxInstruction(MCInst &Inst,
