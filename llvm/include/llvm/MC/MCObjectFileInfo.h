@@ -175,6 +175,7 @@ protected:
 
   /// Section containing metadata on function stack sizes.
   MCSection *StackSizesSection = nullptr;
+  MCSection *StackArgsSection = nullptr;
 
   /// Section for pseudo probe information used by AutoFDO
   MCSection *PseudoProbeSection = nullptr;
@@ -361,6 +362,8 @@ public:
   MCSection *getRemarksSection() const { return RemarksSection; }
 
   MCSection *getStackSizesSection(const MCSection &TextSec) const;
+
+  MCSection *getStackArgsSection(const MCSection &TextSec) const;
 
   MCSection *getBBAddrMapSection(const MCSection &TextSec) const;
 

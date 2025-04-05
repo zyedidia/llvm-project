@@ -321,7 +321,20 @@ public:
     Parser.addAliasForDirective(".xword", ".8byte");
 
     // Initialize the set of available features.
-    setAvailableFeatures(ComputeAvailableFeatures(getSTI().getFeatureBits()));
+    bool IsLFI = STI.getTargetTriple().isVendorLFI();
+    if (IsLFI) {
+      // We enable all extensions for LFI so that the asm parser that runs
+      // after rewriting has all extensions enabled, since .arch_extension
+      // directives are removed by LLVM before rewriting. See
+      // https://github.com/llvm/llvm-project/issues/117221
+      MCSubtargetInfo &STI = copySTI();
+      STI.ApplyFeatureFlag("+lse");
+      STI.ApplyFeatureFlag("+dotprod");
+      STI.ApplyFeatureFlag("+i8mm");
+      setAvailableFeatures(ComputeAvailableFeatures(STI.getFeatureBits()));
+    } else {
+      setAvailableFeatures(ComputeAvailableFeatures(getSTI().getFeatureBits()));
+    }
   }
 
   bool areEqualRegs(const MCParsedAsmOperand &Op1,

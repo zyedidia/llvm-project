@@ -944,7 +944,6 @@ def FeatureHardenSlsNoComdat : SubtargetFeature<"harden-sls-nocomdat",
   "HardenSlsNoComdat", "true",
   "Generate thunk code for SLS mitigation in the normal text section">;
 
-
 // Only intended to be used by disassemblers.
 def FeatureAll
     : SubtargetFeature<"all", "IsAll", "true", "Enable all instructions">;

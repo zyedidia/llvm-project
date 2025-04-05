@@ -86,12 +86,16 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
 #include "llvm/IR/ValueHandle.h"
+#include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
+#include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
 #include "llvm/MC/MCSchedule.h"
+#include "llvm/MC/MCObjectFileInfo.h"
+#include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSection.h"
 #include "llvm/MC/MCSectionCOFF.h"
 #include "llvm/MC/MCSectionELF.h"
@@ -104,6 +108,9 @@
 #include "llvm/MC/MCTargetOptions.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/SectionKind.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/MC/MCParser/MCAsmParser.h"
+#include "llvm/MC/MCParser/MCTargetAsmParser.h"
 #include "llvm/Object/ELFTypes.h"
 #include "llvm/Pass.h"
 #include "llvm/Remarks/RemarkStreamer.h"
@@ -115,7 +122,9 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/Process.h"
 #include "llvm/Support/VCSRevision.h"
+#include "llvm/Support/YAMLTraits.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
 #include "llvm/Target/TargetMachine.h"
@@ -131,10 +140,27 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <sstream>
 
 using namespace llvm;
 
 #define DEBUG_TYPE "asm-printer"
+
+static cl::opt<std::string> LFIFlags("lfi-flags",
+    cl::desc("LFI flags to pass to rewriter"),
+    cl::init(""), cl::Hidden);
+
+static cl::opt<bool> LFIStores("lfi-stores",
+    cl::desc("Automatically pass --sandbox=stores to rewriter"),
+    cl::init(false), cl::Hidden);
+
+static cl::opt<std::string> LFIRewriter("lfi-rewriter",
+    cl::desc("LFI rewriter tool"),
+    cl::init("lfi-leg"), cl::Hidden);
+
+static cl::opt<bool> LFIDebug("lfi-debug",
+    cl::desc("Show LFI invoked command for debugging"),
+    cl::init(false), cl::Hidden);
 
 // This is a replication of fields of object::PGOAnalysisMap::Features. It
 // should match the order of the fields so that
@@ -1583,6 +1609,43 @@ void AsmPrinter::emitPseudoProbe(const MachineInstr &MI) {
   }
 }
 
+void AsmPrinter::emitStackArgsSection(const MachineFunction &MF) {
+  if (!TM.getTargetTriple().isVendorLFI())
+    return;
+
+  MCSection *StackArgsSection =
+      getObjFileLowering().getStackArgsSection(*getCurrentSection());
+  if (!StackArgsSection)
+    return;
+
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  const TargetFrameLowering *FI = MF.getSubtarget().getFrameLowering();
+  int ValOffset = (FI ? FI->getOffsetOfLocalArea() : 0);
+
+  OutStreamer->pushSection();
+  OutStreamer->switchSection(StackArgsSection);
+
+  const MCSymbol *FunctionSymbol = getFunctionBegin();
+  OutStreamer->emitSymbolValue(FunctionSymbol, TM.getProgramPointerSize());
+  uint32_t Count = 0;
+  for (unsigned i = MFI.getObjectIndexBegin(); i != 0; ++i) {
+    int64_t Offset = MFI.getObjectOffset(i) - ValOffset;
+    if (Offset >= 0)
+      Count++;
+  }
+  OutStreamer->emitInt32(Count);
+  for (unsigned i = MFI.getObjectIndexBegin(); i != 0; ++i) {
+    int64_t Offset = MFI.getObjectOffset(i) - ValOffset;
+    int64_t ObjSize = MFI.getObjectSize(i);
+    if (Offset >= 0) {
+      OutStreamer->emitInt32(Offset);
+      OutStreamer->emitInt32(ObjSize);
+    }
+  }
+
+  OutStreamer->popSection();
+}
+
 void AsmPrinter::emitStackSizeSection(const MachineFunction &MF) {
   if (!MF.getTarget().Options.EmitStackSizeSection)
     return;
@@ -2126,6 +2189,9 @@ void AsmPrinter::emitFunctionBody() {
 
   // Emit section containing stack size metadata.
   emitStackSizeSection(*MF);
+
+  // Emit section containing stack size metadata.
+  emitStackArgsSection(*MF);
 
   // Emit .su file containing function stack size information.
   emitStackUsage(*MF);
@@ -2689,15 +2755,135 @@ bool AsmPrinter::doFinalization(Module &M) {
   // after everything else has gone out.
   emitEndOfAsmFile(M);
 
+  OutStreamer->finish();
+  OutStreamer->reset();
+
+  if (ExtAsm.Out) {
+      if (doExtAsm())
+        std::exit(1); // HACK (how do I return a failure from this function?)
+  }
+
   MMI = nullptr;
   AddrLabelSymbols = nullptr;
 
-  OutStreamer->finish();
-  OutStreamer->reset();
   OwnedMLI.reset();
   OwnedMDT.reset();
 
   return false;
+}
+
+bool AsmPrinter::doExtAsm() {
+  Expected<sys::fs::TempFile> Temp =
+      sys::fs::TempFile::create("rewrite.temp-%%%%%%%.s");
+  if (!Temp) {
+    sys::fs::remove(ExtAsm.File);
+    return true;
+  }
+
+  const char* Rewriter = LFIRewriter.c_str();
+  const char* Flags;
+
+  if (LFIStores)
+    Flags = "--sandbox=stores";
+  else
+    Flags = LFIFlags.c_str();
+
+  auto Prog = sys::findProgramByName(std::string(Rewriter));
+  if (!Prog) {
+      errs() << "Could not find " << Rewriter;
+      sys::fs::remove(ExtAsm.File);
+      consumeError(Temp->discard());
+      return true;
+  }
+
+  std::stringstream SS;
+  SS << Prog.get() << " " << Flags << " " << "-a " << TM.getTargetTriple().getArchName().str() << " " << ExtAsm.File << " -o " << Temp->TmpName << "\n";
+  if (LFIDebug)
+    errs() << SS.str();
+  std::string Cmd = SS.str();
+
+  SmallVector<StringRef, 3> Args = {
+      "/bin/sh", "-c",  Cmd,
+  };
+
+  int RC = sys::ExecuteAndWait(Args[0], Args);
+  if (RC < -1) {
+    printf("lfi: exited abnormally\n");
+  } else if (RC < 0) {
+    printf("lfi: unable to invoke\n");
+  } else if (RC > 0) {
+    printf("lfi: returned non-zero\n");
+  }
+
+  auto EBuf = MemoryBuffer::getFileAsStream(Temp->TmpName);
+  if (!EBuf) {
+    sys::fs::remove(ExtAsm.File);
+    consumeError(Temp->discard());
+    return true;
+  }
+  auto *Buf = EBuf->get();
+  std::string Str(Buf->getBufferStart(), Buf->getBufferEnd());
+
+  std::unique_ptr<MemoryBuffer> MBuf;
+  MBuf = MemoryBuffer::getMemBuffer(Str, Temp->TmpName);
+  auto &MCOptions = TM.Options.MCOptions;
+  SourceMgr SrcMgr;
+  SrcMgr.AddNewSourceBuffer(std::move(MBuf), SMLoc());
+
+  std::unique_ptr<MCRegisterInfo> MRI(TM.getTarget().createMCRegInfo(TM.getTargetTriple().getTriple()));
+  if (!MRI) {
+      errs() << "Unable to create target register info!";
+      abort();
+  }
+
+  std::unique_ptr<MCInstrInfo> MCII(TM.getTarget().createMCInstrInfo());
+
+  std::string OutputString;
+  raw_string_ostream Out(OutputString);
+  auto FOut = std::make_unique<formatted_raw_ostream>(Out);
+
+  MCContext *Ctx = new MCContext(TM.getTargetTriple(), MAI, MRI.get(), TM.getMCSubtargetInfo(), &SrcMgr, OutContext.getTargetOptions());
+  TM.getTarget().createMCObjectFileInfo(*Ctx, OutContext.getObjectFileInfo()->isPositionIndependent());
+  Ctx->setObjectFileInfo(OutContext.getObjectFileInfo());
+
+  std::unique_ptr<MCStreamer> MCStr;
+
+  // The following code can be used to output assembly instead of an object file.
+  // const unsigned OutputAsmVariant = 0;
+  // MCInstPrinter *IP = TM.getTarget().createMCInstPrinter(TM.getTargetTriple(), OutputAsmVariant,
+  //         *MAI, *MCII, *MRI);
+  // std::unique_ptr<MCCodeEmitter> CE = nullptr;
+  // std::unique_ptr<MCAsmBackend> MAB = nullptr;
+  // MCStr.reset(TM.getTarget().createAsmStreamer(Ctx, std::move(FOut), IP, std::move(CE), std::move(MAB)));
+
+  Ctx->setUseNamesOnTempLabels(false);
+
+  MCCodeEmitter *CE = TM.getTarget().createMCCodeEmitter(*MCII, *Ctx);
+  MCAsmBackend *MAB = TM.getTarget().createMCAsmBackend(*TM.getMCSubtargetInfo(), *MRI, MCOptions);
+  MCStr.reset(TM.getTarget().createMCObjectStreamer(
+              TM.getTargetTriple(), *Ctx, std::unique_ptr<MCAsmBackend>(MAB),
+              MAB->createObjectWriter(*ExtAsm.Out), std::unique_ptr<MCCodeEmitter>(CE),
+              *TM.getMCSubtargetInfo()));
+
+  std::unique_ptr<MCAsmParser> Parser(
+    createMCAsmParser(SrcMgr, *Ctx, *MCStr, *MAI));
+
+  std::unique_ptr<MCInstrInfo> MII(TM.getTarget().createMCInstrInfo());
+  assert(MII && "Failed to create instruction info");
+  std::unique_ptr<MCTargetAsmParser> TAP(TM.getTarget().createMCAsmParser(
+              *TM.getMCSubtargetInfo(), *Parser, *MII, MCOptions));
+  if (!TAP)
+      report_fatal_error("External rewriting not supported by this streamer because"
+              " we don't have an asm parser for this target\n");
+
+  Parser->setTargetParser(*TAP);
+
+  bool Failed = Parser->Run(/*NoInitialTextSection*/ false, /*NoFinalize*/ false);
+
+  sys::fs::remove(ExtAsm.File);
+  consumeError(Temp->discard());
+
+  return Failed;
 }
 
 MCSymbol *AsmPrinter::getMBBExceptionSym(const MachineBasicBlock &MBB) {
@@ -2710,6 +2896,14 @@ MCSymbol *AsmPrinter::getMBBExceptionSym(const MachineBasicBlock &MBB) {
 void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
   this->MF = &MF;
   const Function &F = MF.getFunction();
+
+  if (TM.getTargetTriple().isVendorLFI() && TM.getTargetTriple().isX86()) {
+    for (auto &MBB : MF) {
+      if (shouldEmitLabelForBasicBlock(MBB)) {
+        MBB.setAlignment(Align(32));
+      }
+    }
+  }
 
   // Record that there are split-stack functions, so we will emit a special
   // section to tell the linker.
@@ -2749,6 +2943,7 @@ void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
       F.hasFnAttribute("xray-instruction-threshold") ||
       needFuncLabels(MF, *this) || NeedsLocalForSize ||
       MF.getTarget().Options.EmitStackSizeSection ||
+      TM.getTargetTriple().isVendorLFI() ||
       MF.getTarget().Options.BBAddrMap) {
     CurrentFnBegin = createTempSymbol("func_begin");
     if (NeedsLocalForSize)

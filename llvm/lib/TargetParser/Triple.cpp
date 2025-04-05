@@ -255,6 +255,8 @@ StringRef Triple::getVendorTypeName(VendorType Kind) {
   switch (Kind) {
   case UnknownVendor: return "unknown";
 
+  case LFI: return "lfi";
+
   case AMD: return "amd";
   case Apple: return "apple";
   case CSR: return "csr";
@@ -664,6 +666,7 @@ static Triple::VendorType parseVendor(StringRef VendorName) {
       .Case("suse", Triple::SUSE)
       .Case("oe", Triple::OpenEmbedded)
       .Case("intel", Triple::Intel)
+      .Case("lfi", Triple::LFI)
       .Default(Triple::UnknownVendor);
 }
 
