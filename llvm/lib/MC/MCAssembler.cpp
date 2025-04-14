@@ -1109,7 +1109,7 @@ bool MCAssembler::relaxInstruction(MCRelaxableFragment &F) {
 
 bool MCAssembler::relaxLEB(MCLEBFragment &LF) {
   const unsigned OldSize = static_cast<unsigned>(LF.getContents().size());
-  unsigned PadTo = OldSize;
+  unsigned PadTo = OldSize > 5 ? OldSize : 5;
   int64_t Value;
   SmallVectorImpl<char> &Data = LF.getContents();
   LF.getFixups().clear();
