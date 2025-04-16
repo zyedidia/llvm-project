@@ -520,7 +520,7 @@ AArch64RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       markSuperRegs(Reserved, AArch64::LR);
       markSuperRegs(Reserved, AArch64::W30);
     }
-    if (hasLFIFlag("--decl") || Subtarget.useLFIDeCl())
+    if (hasLFIFlag("--decl") || hasLFIFlag("--sys-external") || Subtarget.useLFIDeCl())
         markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(25)); // x25
     if (hasLFIFlag("--meter") || Subtarget.useLFIMeterTimer() || Subtarget.useLFIMeterBranch()) {
       markSuperRegs(Reserved, AArch64::GPR32commonRegClass.getRegister(23)); // x23
