@@ -1529,6 +1529,8 @@ void AsmPrinter::emitStackArgsSection(const MachineFunction &MF) {
 
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const TargetFrameLowering *FI = MF.getSubtarget().getFrameLowering();
+  const Function &F = MF.getFunction();
+
   int ValOffset = (FI ? FI->getOffsetOfLocalArea() : 0);
 
   OutStreamer->pushSection();
@@ -1536,6 +1538,18 @@ void AsmPrinter::emitStackArgsSection(const MachineFunction &MF) {
 
   const MCSymbol *FunctionSymbol = getFunctionBegin();
   OutStreamer->emitSymbolValue(FunctionSymbol, TM.getProgramPointerSize());
+
+  uint64_t StructRetSize = 0;
+  for (const Argument &Arg : F.args()) {
+    if (Arg.hasStructRetAttr()) {
+      const DataLayout &DL = F.getParent()->getDataLayout();
+      Type *RetTy = F.getParamStructRetType(0);
+      StructRetSize = DL.getTypeAllocSize(RetTy);
+      break;
+    }
+  }
+  OutStreamer->emitInt32(StructRetSize);
+
   uint32_t Count = 0;
   for (unsigned i = MFI.getObjectIndexBegin(); i != 0; ++i) {
     int64_t Offset = MFI.getObjectOffset(i) - ValOffset;
