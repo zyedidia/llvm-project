@@ -1,0 +1,36 @@
+
+#ifndef ELF_RELOC
+#error "ELF_RELOC must be defined"
+#endif
+
+ELF_RELOC(R_QUARK64_ADD8,                            0x100000)
+ELF_RELOC(R_QUARK64_ADD16,                           0x100001)
+ELF_RELOC(R_QUARK64_ADD32,                           0x100002)
+ELF_RELOC(R_QUARK64_ADD64,                           0x100003)
+ELF_RELOC(R_QUARK64_SUB8,                            0x100004)
+ELF_RELOC(R_QUARK64_SUB16,                           0x100005)
+ELF_RELOC(R_QUARK64_SUB32,                           0x100006)
+ELF_RELOC(R_QUARK64_SUB64,                           0x100007)
+ELF_RELOC(R_QUARK64_SET_ULEB128,                     0x100008)
+ELF_RELOC(R_QUARK64_SUB_ULEB128,                     0x100009)
+ELF_RELOC(R_QUARK64_SET6,                            0x10000a)
+ELF_RELOC(R_QUARK64_SET8,                            0x10000b)
+ELF_RELOC(R_QUARK64_SET16,                           0x10000c)
+ELF_RELOC(R_QUARK64_SET32,                           0x10000d)
+ELF_RELOC(R_QUARK64_SUB6,                            0x10000e)
+
+ELF_RELOC(R_QUARK32_ADD8,                            241)
+ELF_RELOC(R_QUARK32_ADD16,                           242)
+ELF_RELOC(R_QUARK32_ADD32,                           243)
+ELF_RELOC(R_QUARK32_ADD64,                           244)
+ELF_RELOC(R_QUARK32_SUB8,                            245)
+ELF_RELOC(R_QUARK32_SUB16,                           246)
+ELF_RELOC(R_QUARK32_SUB32,                           247)
+ELF_RELOC(R_QUARK32_SUB64,                           248)
+ELF_RELOC(R_QUARK32_SET_ULEB128,                     249)
+ELF_RELOC(R_QUARK32_SUB_ULEB128,                     250)
+ELF_RELOC(R_QUARK32_SET6,                            251)
+ELF_RELOC(R_QUARK32_SET8,                            252)
+ELF_RELOC(R_QUARK32_SET16,                           253)
+ELF_RELOC(R_QUARK32_SET32,                           254)
+ELF_RELOC(R_QUARK32_SUB6,                            255)

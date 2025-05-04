@@ -37,6 +37,12 @@ cl::opt<cl::boolOrDefault> UseLEB128Directives(
     cl::desc(
         "Disable the usage of LEB128 directives, and generate .byte instead."),
     cl::init(cl::BOU_UNSET));
+
+cl::opt<bool> Quark(
+    "quark", cl::Hidden,
+    cl::desc(
+        "Enable Quark relocations"),
+    cl::init(false));
 }
 
 MCAsmInfo::MCAsmInfo() {
@@ -68,6 +74,7 @@ MCAsmInfo::MCAsmInfo() {
   ParseInlineAsmUsingAsmParser = false;
   PreserveAsmComments = true;
   PPCUseFullRegisterNames = false;
+  UseQuark = Quark;
 }
 
 MCAsmInfo::~MCAsmInfo() = default;

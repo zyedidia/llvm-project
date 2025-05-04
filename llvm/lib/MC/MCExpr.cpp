@@ -336,7 +336,8 @@ static void AttemptToFoldSymbolOffsetDifference(
   // .size/.fill), disable the fast path.
   bool Layout = Asm->hasLayout();
   if (Layout && (InSet || !SecA.hasInstructions() ||
-                 !Asm->getBackend().allowLinkerRelaxation())) {
+                 (!Asm->getBackend().allowLinkerRelaxation() &&
+                  !Asm->getContext().getAsmInfo()->useQuark()))) {
     // If both symbols are in the same fragment, return the difference of their
     // offsets. canGetFragmentOffset(FA) may be false.
     if (FA == FB && !SA.isVariable() && !SB.isVariable()) {
@@ -385,7 +386,7 @@ static void AttemptToFoldSymbolOffsetDifference(
     bool BBeforeRelax = false, AAfterRelax = false;
     for (auto FI = FB; FI; FI = FI->getNext()) {
       auto DF = dyn_cast<MCDataFragment>(FI);
-      if (DF && DF->isLinkerRelaxable()) {
+      if (DF && (DF->isLinkerRelaxable() || Asm->getContext().getAsmInfo()->useQuark())) {
         if (&*FI != FB || SBOffset != DF->getContents().size())
           BBeforeRelax = true;
         if (&*FI != FA || SAOffset == DF->getContents().size())

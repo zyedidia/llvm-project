@@ -210,6 +210,9 @@ protected:
   /// True if the target supports LEB128 directives.
   bool HasLEB128Directives = true;
 
+  /// True if targeting Quark object files.
+  bool UseQuark = false;
+
   /// True if full register names are printed.
   bool PPCUseFullRegisterNames = false;
 
@@ -437,6 +440,8 @@ public:
 
   /// Get the code pointer size in bytes.
   unsigned getCodePointerSize() const { return CodePointerSize; }
+
+  bool useQuark() const { return UseQuark; }
 
   /// Get the callee-saved register stack slot
   /// size in bytes.

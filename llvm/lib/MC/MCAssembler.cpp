@@ -13,6 +13,7 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/BinaryFormat/ELF.h"
 #include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
@@ -1052,7 +1053,7 @@ bool MCAssembler::fragmentNeedsRelaxation(const MCRelaxableFragment *F) const {
   // If this inst doesn't ever need relaxation, ignore it. This occurs when we
   // are intentionally pushing out inst fragments, or because we relaxed a
   // previous instruction to one that doesn't need relaxation.
-  if (!getBackend().mayNeedRelaxation(F->getInst(), *F->getSubtargetInfo()))
+  if (getContext().getAsmInfo()->useQuark() || !getBackend().mayNeedRelaxation(F->getInst(), *F->getSubtargetInfo()))
     return false;
 
   for (const MCFixup &Fixup : F->getFixups())
@@ -1087,9 +1088,22 @@ bool MCAssembler::relaxInstruction(MCRelaxableFragment &F) {
   return true;
 }
 
+std::pair<bool, bool> quarkRelaxLEB128(const MCAssembler &Asm,
+                                       MCLEBFragment &LF,
+                                       int64_t &Value) {
+  if (LF.isSigned())
+    return std::make_pair(false, false);
+  const MCExpr &Expr = LF.getValue();
+  LF.getFixups().push_back(
+      MCFixup::create(0, &Expr, FK_Data_leb128, Expr.getLoc()));
+  return std::make_pair(Expr.evaluateKnownAbsolute(Value, Asm), false);
+}
+
 bool MCAssembler::relaxLEB(MCLEBFragment &LF) {
   const unsigned OldSize = static_cast<unsigned>(LF.getContents().size());
   unsigned PadTo = OldSize;
+  if (getContext().getAsmInfo()->useQuark() && PadTo < 5)
+      PadTo = 5; // Must be padded to at least 5 for Quark.
   int64_t Value;
   SmallVectorImpl<char> &Data = LF.getContents();
   LF.getFixups().clear();
@@ -1101,7 +1115,11 @@ bool MCAssembler::relaxLEB(MCLEBFragment &LF) {
                  : LF.getValue().evaluateAsAbsolute(Value, *this);
   if (!Abs) {
     bool Relaxed, UseZeroPad;
-    std::tie(Relaxed, UseZeroPad) = getBackend().relaxLEB128(*this, LF, Value);
+    if (getContext().getAsmInfo()->useQuark()) {
+      std::tie(Relaxed, UseZeroPad) = quarkRelaxLEB128(*this, LF, Value);
+    } else {
+      std::tie(Relaxed, UseZeroPad) = getBackend().relaxLEB128(*this, LF, Value);
+    }
     if (!Relaxed) {
       getContext().reportError(LF.getValue().getLoc(),
                                Twine(LF.isSigned() ? ".s" : ".u") +
@@ -1187,8 +1205,101 @@ bool MCAssembler::relaxBoundaryAlign(MCBoundaryAlignFragment &BF) {
   return true;
 }
 
+static std::pair<MCFixupKind, MCFixupKind>
+quarkGetRelocPairForSize(unsigned Size) {
+  switch (Size) {
+  default:
+    llvm_unreachable("unsupported fixup size");
+  case 1:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_ADD8),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_SUB8));
+  case 2:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_ADD16),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_SUB16));
+  case 4:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_ADD32),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_SUB32));
+  case 8:
+    return std::make_pair(
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_ADD64),
+        MCFixupKind(FirstLiteralRelocationKind + ELF::R_QUARK64_SUB64));
+  }
+}
+
+static bool quarkRelaxDwarfLineAddr(const MCAssembler &Asm,
+                                         MCDwarfLineAddrFragment &DF,
+                                         bool &WasRelaxed) {
+  MCContext &C = Asm.getContext();
+
+  int64_t LineDelta = DF.getLineDelta();
+  const MCExpr &AddrDelta = DF.getAddrDelta();
+  SmallVectorImpl<char> &Data = DF.getContents();
+  SmallVectorImpl<MCFixup> &Fixups = DF.getFixups();
+  size_t OldSize = Data.size();
+
+  int64_t Value;
+  [[maybe_unused]] bool IsAbsolute =
+      AddrDelta.evaluateKnownAbsolute(Value, Asm);
+  assert(IsAbsolute && "CFA with invalid expression");
+
+  Data.clear();
+  Fixups.clear();
+  raw_svector_ostream OS(Data);
+
+  // INT64_MAX is a signal that this is actually a DW_LNE_end_sequence.
+  if (LineDelta != INT64_MAX) {
+    OS << uint8_t(dwarf::DW_LNS_advance_line);
+    encodeSLEB128(LineDelta, OS);
+  }
+
+  unsigned Offset;
+  std::pair<MCFixupKind, MCFixupKind> Fixup;
+
+  // According to the DWARF specification, the `DW_LNS_fixed_advance_pc` opcode
+  // takes a single unsigned half (unencoded) operand. The maximum encodable
+  // value is therefore 65535.  Set a conservative upper bound for relaxation.
+  if (Value > 60000) {
+    unsigned PtrSize = C.getAsmInfo()->getCodePointerSize();
+
+    OS << uint8_t(dwarf::DW_LNS_extended_op);
+    encodeULEB128(PtrSize + 1, OS);
+
+    OS << uint8_t(dwarf::DW_LNE_set_address);
+    Offset = OS.tell();
+    assert((PtrSize == 4 || PtrSize == 8) && "Unexpected pointer size");
+    Fixup = quarkGetRelocPairForSize(PtrSize);
+    OS.write_zeros(PtrSize);
+  } else {
+    OS << uint8_t(dwarf::DW_LNS_fixed_advance_pc);
+    Offset = OS.tell();
+    Fixup = quarkGetRelocPairForSize(2);
+    support::endian::write<uint16_t>(OS, 0, llvm::endianness::little);
+  }
+
+  const MCBinaryExpr &MBE = cast<MCBinaryExpr>(AddrDelta);
+  Fixups.push_back(MCFixup::create(Offset, MBE.getLHS(), std::get<0>(Fixup)));
+  Fixups.push_back(MCFixup::create(Offset, MBE.getRHS(), std::get<1>(Fixup)));
+
+  if (LineDelta == INT64_MAX) {
+    OS << uint8_t(dwarf::DW_LNS_extended_op);
+    OS << uint8_t(1);
+    OS << uint8_t(dwarf::DW_LNE_end_sequence);
+  } else {
+    OS << uint8_t(dwarf::DW_LNS_copy);
+  }
+
+  WasRelaxed = OldSize != Data.size();
+  return true;
+}
+
 bool MCAssembler::relaxDwarfLineAddr(MCDwarfLineAddrFragment &DF) {
   bool WasRelaxed;
+  if (getContext().getAsmInfo()->useQuark())
+    if (quarkRelaxDwarfLineAddr(*this, DF, WasRelaxed))
+      return WasRelaxed;
   if (getBackend().relaxDwarfLineAddr(*this, DF, WasRelaxed))
     return WasRelaxed;
 
@@ -1209,8 +1320,73 @@ bool MCAssembler::relaxDwarfLineAddr(MCDwarfLineAddrFragment &DF) {
   return OldSize != Data.size();
 }
 
+static bool quarkRelaxDwarfCFA(const MCAssembler &Asm,
+                                    MCDwarfCallFrameFragment &DF,
+                                    bool &WasRelaxed) {
+  const MCExpr &AddrDelta = DF.getAddrDelta();
+  SmallVectorImpl<char> &Data = DF.getContents();
+  SmallVectorImpl<MCFixup> &Fixups = DF.getFixups();
+  size_t OldSize = Data.size();
+
+  int64_t Value;
+  if (AddrDelta.evaluateAsAbsolute(Value, Asm))
+    return false;
+  [[maybe_unused]] bool IsAbsolute =
+      AddrDelta.evaluateKnownAbsolute(Value, Asm);
+  assert(IsAbsolute && "CFA with invalid expression");
+
+  Data.clear();
+  Fixups.clear();
+  raw_svector_ostream OS(Data);
+
+  assert(Asm.getContext().getAsmInfo()->getMinInstAlignment() == 1 &&
+         "expected 1-byte alignment");
+  if (Value == 0) {
+    WasRelaxed = OldSize != Data.size();
+    return true;
+  }
+
+  auto AddFixups = [&Fixups, &AddrDelta](unsigned Offset,
+                                         std::pair<unsigned, unsigned> Fixup) {
+    const MCBinaryExpr &MBE = cast<MCBinaryExpr>(AddrDelta);
+    Fixups.push_back(
+        MCFixup::create(Offset, MBE.getLHS(),
+                        static_cast<MCFixupKind>(FirstLiteralRelocationKind +
+                                                 std::get<0>(Fixup))));
+    Fixups.push_back(
+        MCFixup::create(Offset, MBE.getRHS(),
+                        static_cast<MCFixupKind>(FirstLiteralRelocationKind +
+                                                 std::get<1>(Fixup))));
+  };
+
+  if (isUIntN(6, Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc);
+    AddFixups(0, {ELF::R_QUARK64_SET6, ELF::R_QUARK64_SUB6});
+  } else if (isUInt<8>(Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc1);
+    support::endian::write<uint8_t>(OS, 0, llvm::endianness::little);
+    AddFixups(1, {ELF::R_QUARK64_SET8, ELF::R_QUARK64_SUB8});
+  } else if (isUInt<16>(Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc2);
+    support::endian::write<uint16_t>(OS, 0, llvm::endianness::little);
+    AddFixups(1, {ELF::R_QUARK64_SET16, ELF::R_QUARK64_SUB16});
+  } else if (isUInt<32>(Value)) {
+    OS << uint8_t(dwarf::DW_CFA_advance_loc4);
+    support::endian::write<uint32_t>(OS, 0, llvm::endianness::little);
+    AddFixups(1, {ELF::R_QUARK64_SET32, ELF::R_QUARK64_SUB32});
+  } else {
+    llvm_unreachable("unsupported CFA encoding");
+  }
+
+  WasRelaxed = OldSize != Data.size();
+  return true;
+}
+
 bool MCAssembler::relaxDwarfCallFrameFragment(MCDwarfCallFrameFragment &DF) {
   bool WasRelaxed;
+  if (getContext().getAsmInfo()->useQuark())
+    if (quarkRelaxDwarfCFA(*this, DF, WasRelaxed))
+      return WasRelaxed;
   if (getBackend().relaxDwarfCFA(*this, DF, WasRelaxed))
     return WasRelaxed;
 

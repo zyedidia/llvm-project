@@ -1059,6 +1059,11 @@ enum {
 #include "ELFRelocs/Xtensa.def"
 };
 
+// ELF Relocation types for Quark
+enum {
+#include "ELFRelocs/Quark.def"
+};
+
 #undef ELF_RELOC
 
 // Section header.

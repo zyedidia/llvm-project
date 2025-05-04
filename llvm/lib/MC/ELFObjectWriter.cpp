@@ -1363,6 +1363,52 @@ bool ELFObjectWriter::checkRelocation(MCContext &Ctx, SMLoc Loc,
   return true;
 }
 
+static bool handleAddSubRelocations(const MCAssembler &Asm,
+                                                const MCFragment &F,
+                                                const MCFixup &Fixup,
+                                                const MCValue &Target,
+                                                uint64_t &FixedValue) {
+  uint64_t FixedValueA, FixedValueB;
+  unsigned TA = 0, TB = 0;
+  switch (Fixup.getKind()) {
+  case llvm::FK_Data_1:
+    TA = ELF::R_QUARK64_ADD8;
+    TB = ELF::R_QUARK64_SUB8;
+    break;
+  case llvm::FK_Data_2:
+    TA = ELF::R_QUARK64_ADD16;
+    TB = ELF::R_QUARK64_SUB16;
+    break;
+  case llvm::FK_Data_4:
+    TA = ELF::R_QUARK64_ADD32;
+    TB = ELF::R_QUARK64_SUB32;
+    break;
+  case llvm::FK_Data_8:
+    TA = ELF::R_QUARK64_ADD64;
+    TB = ELF::R_QUARK64_SUB64;
+    break;
+  case llvm::FK_Data_leb128:
+    TA = ELF::R_QUARK64_SET_ULEB128;
+    TB = ELF::R_QUARK64_SUB_ULEB128;
+    break;
+  default:
+    llvm_unreachable("unsupported fixup size");
+  }
+  MCValue A = MCValue::get(Target.getSymA(), nullptr, Target.getConstant());
+  MCValue B = MCValue::get(Target.getSymB());
+  auto FA = MCFixup::create(
+      Fixup.getOffset(), nullptr,
+      static_cast<MCFixupKind>(FirstLiteralRelocationKind + TA));
+  auto FB = MCFixup::create(
+      Fixup.getOffset(), nullptr,
+      static_cast<MCFixupKind>(FirstLiteralRelocationKind + TB));
+  auto &Assembler = const_cast<MCAssembler &>(Asm);
+  Asm.getWriter().recordRelocation(Assembler, &F, FA, A, FixedValueA);
+  Asm.getWriter().recordRelocation(Assembler, &F, FB, B, FixedValueB);
+  FixedValue = FixedValueA - FixedValueB;
+  return true;
+}
+
 void ELFObjectWriter::recordRelocation(MCAssembler &Asm,
                                        const MCFragment *Fragment,
                                        const MCFixup &Fixup, MCValue Target,
@@ -1379,6 +1425,10 @@ void ELFObjectWriter::recordRelocation(MCAssembler &Asm,
   if (auto *RefB = Target.getSubSym()) {
     // When there is no relocation specifier, a linker relaxation target may
     // emit ADD/SUB relocations for A-B+C.
+    if (Asm.getContext().getAsmInfo()->useQuark() && Target.getSymA()) {
+      if (handleAddSubRelocations(Asm, *Fragment, Fixup, Target, FixedValue))
+        return;
+    }
     if (Target.getSymA() && Backend.handleAddSubRelocations(
                                 Asm, *Fragment, Fixup, Target, FixedValue))
       return;
