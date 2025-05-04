@@ -362,7 +362,8 @@ void MCObjectStreamer::emitInstructionImpl(const MCInst &Inst,
   MCAssembler &Assembler = getAssembler();
   MCAsmBackend &Backend = Assembler.getBackend();
   if (!(Backend.mayNeedRelaxation(Inst, STI) ||
-        Backend.allowEnhancedRelaxation())) {
+        Backend.allowEnhancedRelaxation() ||
+        Assembler.getContext().getAsmInfo()->useQuark())) {
     emitInstToData(Inst, STI);
     return;
   }
