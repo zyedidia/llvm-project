@@ -372,7 +372,8 @@ unsigned RISCVAsmBackend::getRelaxedOpcode(unsigned Op) const {
 
 bool RISCVAsmBackend::mayNeedRelaxation(const MCInst &Inst,
                                         const MCSubtargetInfo &STI) const {
-  return getRelaxedOpcode(Inst.getOpcode()) != Inst.getOpcode();
+  // return getRelaxedOpcode(Inst.getOpcode()) != Inst.getOpcode();
+  return true;
 }
 
 bool RISCVAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,

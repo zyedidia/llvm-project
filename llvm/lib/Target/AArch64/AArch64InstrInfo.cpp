@@ -8868,6 +8868,12 @@ AArch64InstrInfo::getOutliningTypeImpl(MachineBasicBlock::iterator &MIT,
   MachineBasicBlock *MBB = MI.getParent();
   MachineFunction *MF = MBB->getParent();
   AArch64FunctionInfo *FuncInfo = MF->getInfo<AArch64FunctionInfo>();
+  const auto &F = MI.getMF()->getFunction();
+
+  // (zby): not sure if this is actually necessary -- copied it from RISC-V
+  if (MI.isCFIInstruction())
+    return F.needsUnwindTableEntry() ? outliner::InstrType::Illegal
+                                     : outliner::InstrType::Invisible;
 
   // Don't outline anything used for return address signing. The outlined
   // function will get signed later if needed

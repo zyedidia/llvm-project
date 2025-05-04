@@ -1072,7 +1072,7 @@ bool MCAssembler::fragmentNeedsRelaxation(const MCRelaxableFragment *F) const {
   // If this inst doesn't ever need relaxation, ignore it. This occurs when we
   // are intentionally pushing out inst fragments, or because we relaxed a
   // previous instruction to one that doesn't need relaxation.
-  if (!getBackend().mayNeedRelaxation(F->getInst(), *F->getSubtargetInfo()))
+  // if (!getBackend().mayNeedRelaxation(F->getInst(), *F->getSubtargetInfo()))
     return false;
 
   for (const MCFixup &Fixup : F->getFixups())

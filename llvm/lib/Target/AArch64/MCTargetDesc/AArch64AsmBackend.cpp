@@ -98,8 +98,8 @@ public:
                   uint64_t Value, bool IsResolved,
                   const MCSubtargetInfo *STI) const override;
 
-  // bool mayNeedRelaxation(const MCInst &Inst,
-  //                        const MCSubtargetInfo &STI) const override;
+  bool mayNeedRelaxation(const MCInst &Inst,
+                         const MCSubtargetInfo &STI) const override;
 
   bool fixupNeedsRelaxation(const MCFixup &Fixup,
                             uint64_t Value) const override;
@@ -544,10 +544,10 @@ void AArch64AsmBackend::applyFixup(const MCAssembler &Asm, const MCFixup &Fixup,
   }
 }
 
-// bool AArch64AsmBackend::mayNeedRelaxation(const MCInst &Inst,
-//                                         const MCSubtargetInfo &STI) const {
-//   return true;
-// }
+bool AArch64AsmBackend::mayNeedRelaxation(const MCInst &Inst,
+                                        const MCSubtargetInfo &STI) const {
+  return true;
+}
 
 bool AArch64AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
                                              uint64_t Value) const {
@@ -555,7 +555,8 @@ bool AArch64AsmBackend::fixupNeedsRelaxation(const MCFixup &Fixup,
   // into the targets for now.
   //
   // Relax if the value is too big for a (signed) i8.
-  return int64_t(Value) != int64_t(int8_t(Value));
+  // return int64_t(Value) != int64_t(int8_t(Value));
+  return true;
 }
 
 bool AArch64AsmBackend::relaxDwarfLineAddr(const MCAssembler &Asm,
