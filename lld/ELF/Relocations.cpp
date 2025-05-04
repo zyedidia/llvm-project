@@ -985,7 +985,7 @@ bool RelocationScanner::isStaticLinkTimeConstant(RelExpr e, RelType type,
           R_GOTPLT_GOTREL, R_GOTPLT_PC, RE_PPC32_PLTREL, RE_PPC64_CALL_PLT,
           RE_PPC64_RELAX_TOC, RE_RISCV_ADD, RE_AARCH64_GOT_PAGE,
           RE_AARCH64_AUTH_GOT, RE_AARCH64_AUTH_GOT_PC, RE_LOONGARCH_PLT_PAGE_PC,
-          RE_LOONGARCH_GOT, RE_LOONGARCH_GOT_PAGE_PC>(e))
+          RE_LOONGARCH_GOT, RE_LOONGARCH_GOT_PAGE_PC, R_QUARK_ADD>(e))
     return true;
 
   // These never do, except if the entire file is position dependent or if
@@ -1000,7 +1000,7 @@ bool RelocationScanner::isStaticLinkTimeConstant(RelExpr e, RelType type,
     return true;
 
   // Constant when referencing a non-preemptible symbol.
-  if (e == R_SIZE || e == RE_RISCV_LEB128)
+  if (e == R_SIZE || e == RE_RISCV_LEB128 || e == R_QUARK_LEB128)
     return true;
 
   // For the target and the relocation, we want to know if they are

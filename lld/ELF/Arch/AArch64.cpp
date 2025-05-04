@@ -133,6 +133,23 @@ AArch64::AArch64(Ctx &ctx) : TargetInfo(ctx) {
 RelExpr AArch64::getRelExpr(RelType type, const Symbol &s,
                             const uint8_t *loc) const {
   switch (type) {
+  case R_QUARK64_ADD8:
+  case R_QUARK64_ADD16:
+  case R_QUARK64_ADD32:
+  case R_QUARK64_ADD64:
+  case R_QUARK64_SET6:
+  case R_QUARK64_SET8:
+  case R_QUARK64_SET16:
+  case R_QUARK64_SET32:
+  case R_QUARK64_SUB6:
+  case R_QUARK64_SUB8:
+  case R_QUARK64_SUB16:
+  case R_QUARK64_SUB32:
+  case R_QUARK64_SUB64:
+    return R_QUARK_ADD;
+  case R_QUARK64_SET_ULEB128:
+  case R_QUARK64_SUB_ULEB128:
+    return R_QUARK_LEB128;
   case R_AARCH64_ABS16:
   case R_AARCH64_ABS32:
   case R_AARCH64_ABS64:
@@ -495,11 +512,48 @@ static void writeSMovWImm(uint8_t *loc, uint32_t imm) {
 void AArch64::relocate(uint8_t *loc, const Relocation &rel,
                        uint64_t val) const {
   switch (rel.type) {
+  case R_QUARK64_ADD8:
+    *loc += val;
+    return;
+  case R_QUARK64_ADD16:
+    write16le(loc, read16le(loc) + val);
+    return;
+  case R_QUARK64_ADD32:
+    write32le(loc, read32le(loc) + val);
+    return;
+  case R_QUARK64_ADD64:
+    write64le(loc, read64le(loc) + val);
+    return;
+  case R_QUARK64_SUB6:
+    *loc = (*loc & 0xc0) | (((*loc & 0x3f) - val) & 0x3f);
+    return;
+  case R_QUARK64_SUB8:
+    *loc -= val;
+    return;
+  case R_QUARK64_SUB16:
+    write16le(loc, read16le(loc) - val);
+    return;
+  case R_QUARK64_SUB32:
+    write32le(loc, read32le(loc) - val);
+    return;
+  case R_QUARK64_SUB64:
+    write64le(loc, read64le(loc) - val);
+    return;
+  case R_QUARK64_SET6:
+    *loc = (*loc & 0xc0) | (val & 0x3f);
+    return;
+  case R_QUARK64_SET8:
+    *loc = val;
+    return;
+  case R_QUARK64_SET16:
+    write16le(loc, val);
+    return;
   case R_AARCH64_ABS16:
   case R_AARCH64_PREL16:
     checkIntUInt(ctx, loc, val, 16, rel);
     write16(ctx, loc, val);
     break;
+  case R_QUARK64_SET32:
   case R_AARCH64_ABS32:
   case R_AARCH64_PREL32:
     checkIntUInt(ctx, loc, val, 32, rel);
@@ -933,8 +987,9 @@ void AArch64::relocateAlloc(InputSectionBase &sec, uint8_t *buf) const {
   else if (auto *ehIn = dyn_cast<EhInputSection>(&sec))
     secAddr += ehIn->getParent()->outSecOff;
   AArch64Relaxer relaxer(ctx, sec.relocs());
-  for (size_t i = 0, size = sec.relocs().size(); i != size; ++i) {
-    const Relocation &rel = sec.relocs()[i];
+  const ArrayRef<Relocation> relocs = sec.relocs();
+  for (size_t i = 0, size = relocs.size(); i != size; ++i) {
+    const Relocation &rel = relocs[i];
     uint8_t *loc = buf + rel.offset;
     const uint64_t val = sec.getRelocTargetVA(ctx, rel, secAddr + rel.offset);
 
@@ -968,6 +1023,23 @@ void AArch64::relocateAlloc(InputSectionBase &sec, uint8_t *buf) const {
     case R_RELAX_TLS_IE_TO_LE:
       relaxTlsIeToLe(loc, rel, val);
       continue;
+    case R_QUARK_LEB128:
+      if (i + 1 < size) {
+        const Relocation &rel1 = relocs[i + 1];
+        if (rel.type == R_QUARK64_SET_ULEB128 &&
+            rel1.type == R_QUARK64_SUB_ULEB128 && rel.offset == rel1.offset) {
+          auto val = rel.sym->getVA(ctx, rel.addend) - rel1.sym->getVA(ctx, rel1.addend);
+          if (overwriteULEB128(loc, val) >= 0x80)
+            Err(ctx) << sec.getLocation(rel.offset) << ": ULEB128 value " << val
+                     << " exceeds available space; references '" << rel.sym
+                     << "'";
+          ++i;
+          continue;
+        }
+      }
+      Err(ctx) << sec.getLocation(rel.offset)
+               << ": R_QUARK64_SET_ULEB128 not paired with R_QUARK64_SUB_SET128";
+      return;
     default:
       break;
     }

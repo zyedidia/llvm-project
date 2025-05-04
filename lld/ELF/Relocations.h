@@ -86,6 +86,9 @@ enum RelExpr {
   R_TLSLD_HINT,
   R_TLSLD_PC,
 
+  R_QUARK_ADD,
+  R_QUARK_LEB128,
+
   // The following is abstract relocation types used for only one target.
   //
   // Even though RelExpr is intended to be a target-neutral representation

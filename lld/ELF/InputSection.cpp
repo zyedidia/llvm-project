@@ -779,6 +779,8 @@ uint64_t InputSectionBase::getRelocTargetVA(Ctx &ctx, const Relocation &r,
   case R_RELAX_TLS_LD_TO_LE_ABS:
   case R_RELAX_GOT_PC_NOPIC:
   case RE_AARCH64_AUTH:
+  case R_QUARK_ADD:
+  case R_QUARK_LEB128:
   case RE_RISCV_ADD:
   case RE_RISCV_LEB128:
     return r.sym->getVA(ctx, a);
@@ -1125,7 +1127,7 @@ void InputSection::relocateNonAlloc(Ctx &ctx, uint8_t *buf,
     // R_ABS/R_DTPREL and some other relocations can be used from non-SHF_ALLOC
     // sections.
     if (LLVM_LIKELY(expr == R_ABS) || expr == R_DTPREL || expr == R_GOTPLTREL ||
-        expr == RE_RISCV_ADD || expr == RE_ARM_SBREL) {
+        expr == RE_RISCV_ADD || expr == RE_ARM_SBREL || expr == R_QUARK_ADD) {
       target.relocateNoSym(bufLoc, type,
                            SignExtend64<bits>(sym.getVA(ctx, addend)));
       continue;
