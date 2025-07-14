@@ -561,21 +561,8 @@ BitVector X86RegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   Reserved.set(X86::MXCSR);
 
   if (IsLFI) {
-    for (const MCPhysReg &SubReg : subregs_inclusive(X86::R11)) // scratch
-      Reserved.set(SubReg);
     for (const MCPhysReg &SubReg : subregs_inclusive(X86::R14)) // base
       Reserved.set(SubReg);
-
-    const auto& Subtarget = MF.getSubtarget<X86Subtarget>();
-    if (hasLFIFlag("--p2size=0") || Subtarget.useLFILargeSandbox())
-      for (const MCPhysReg &SubReg : subregs_inclusive(X86::R15)) // mask
-        Reserved.set(SubReg);
-    if (hasLFIFlag("--decl") || Subtarget.useLFIDeCl())
-      for (const MCPhysReg &SubReg : subregs_inclusive(X86::R13)) // sys external
-        Reserved.set(SubReg);
-    if (hasLFIFlag("--meter") || Subtarget.useLFIMeterTimer() || Subtarget.useLFIMeterBranch())
-      for (const MCPhysReg &SubReg : subregs_inclusive(X86::R12)) // gas
-        Reserved.set(SubReg);
   }
 
   // Set the stack-pointer register and its aliases as reserved.
