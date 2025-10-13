@@ -2763,22 +2763,22 @@ void AsmPrinter::SetupMachineFunction(MachineFunction &MF) {
   this->MF = &MF;
   const Function &F = MF.getFunction();
 
-  if (TM.getTargetTriple().isVendorLFI() && TM.getTargetTriple().isX86()) {
-    for (auto &MBB : MF) {
-      if (shouldEmitLabelForBasicBlock(MBB)) {
-        MBB.setAlignment(Align(32));
-      }
-    }
-  } else if (TM.getTargetTriple().isVendorLFI() && hasLFIFlag("--meter")) {
-    for (auto &MBB : MF) {
-      if (shouldEmitLabelForBasicBlock(MBB)) {
-        if (hasLFIFlag("--meter=branch"))
-          MBB.setAlignment(Align(16));
-        else if (hasLFIFlag("--meter=timer"))
-          MBB.setAlignment(Align(8));
-      }
-    }
-  }
+  // if (TM.getTargetTriple().isVendorLFI() && TM.getTargetTriple().isX86()) {
+  //   for (auto &MBB : MF) {
+  //     if (shouldEmitLabelForBasicBlock(MBB)) {
+  //       MBB.setAlignment(Align(32));
+  //     }
+  //   }
+  // } else if (TM.getTargetTriple().isVendorLFI() && hasLFIFlag("--meter")) {
+  //   for (auto &MBB : MF) {
+  //     if (shouldEmitLabelForBasicBlock(MBB)) {
+  //       if (hasLFIFlag("--meter=branch"))
+  //         MBB.setAlignment(Align(16));
+  //       else if (hasLFIFlag("--meter=timer"))
+  //         MBB.setAlignment(Align(8));
+  //     }
+  //   }
+  // }
 
   // Record that there are split-stack functions, so we will emit a special
   // section to tell the linker.
