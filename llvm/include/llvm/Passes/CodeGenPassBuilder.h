@@ -85,6 +85,7 @@
 #include "llvm/CodeGen/RemoveRedundantDebugValues.h"
 #include "llvm/CodeGen/RenameIndependentSubregs.h"
 #include "llvm/CodeGen/ReplaceWithVeclib.h"
+#include "llvm/CodeGen/SafeHeap.h"
 #include "llvm/CodeGen/SafeStack.h"
 #include "llvm/CodeGen/SanitizerBinaryMetadata.h"
 #include "llvm/CodeGen/SelectOptimize.h"
@@ -895,6 +896,7 @@ void CodeGenPassBuilder<Derived, TargetMachineT>::addISelPrepare(
   // Add both the safe stack and the stack protection passes: each of them will
   // only protect functions that have corresponding attributes.
   addPass(SafeStackPass(TM));
+  addPass(SafeHeapPass(TM));
   addPass(StackProtectorPass(TM));
 
   if (Opt.PrintISelInput)

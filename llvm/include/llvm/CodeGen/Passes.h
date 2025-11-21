@@ -504,6 +504,8 @@ createGlobalMergePass(const TargetMachine *TM, unsigned MaximalOffset,
                       bool MergeConstantByDefault = false,
                       bool MergeConstAggressiveByDefault = false);
 
+LLVM_ABI FunctionPass *createSafeHeapPass();
+
 /// This pass splits the stack into a safe stack and an unsafe stack to
 /// protect against stack-based overflow vulnerabilities.
 LLVM_ABI FunctionPass *createSafeStackPass();
