@@ -164,6 +164,13 @@ list(INSERT CMAKE_MODULE_PATH 0
 
 include(AddLLD)
 
+set(LLD_CASM_DIR "" CACHE PATH
+  "the casm repository, whose libcasm lets lld read Casm modules")
+if(LLD_CASM_DIR)
+  set(LLD_CASM_TOOLS_DIR "${LLD_CASM_DIR}/build/release/bin" CACHE PATH
+    "the casm tools the tests assemble modules with")
+endif()
+
 option(LLD_USE_VTUNE
        "Enable VTune user task tracking."
        OFF)

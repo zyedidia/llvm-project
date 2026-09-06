@@ -23,6 +23,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Driver.h"
+#include "Casm.h"
 #include "Config.h"
 #include "ICF.h"
 #include "InputFiles.h"
@@ -248,6 +249,9 @@ void LinkerDriver::addFile(StringRef path, bool withLOption) {
                         {}});
   } else {
     auto magic = identify_magic(mbref.getBuffer());
+    // A Casm module is an object once lowered, which loading does.
+    if (isCasm(mbref))
+      magic = file_magic::elf_relocatable;
     if (magic == file_magic::unknown) {
       readLinkerScript(ctx, mbref);
       return;
@@ -2127,6 +2131,14 @@ void LinkerDriver::loadFiles() {
   auto makeFile = [&](MemoryBufferRef mb, file_magic magic, StringRef arPath,
                       uint64_t offset,
                       bool lazy) -> std::unique_ptr<InputFile> {
+    if (isCasm(mb)) {
+      CasmFile *cf = lowerCasm(ctx, mb);
+      std::unique_ptr<ELFFileBase> f =
+          createObjFile(ctx, cf->elf, arPath, lazy);
+      f->casm = cf;
+      cf->file = f.get();
+      return f;
+    }
     if (magic == file_magic::bitcode) {
       std::lock_guard<std::mutex> lk(mu);
       return std::make_unique<BitcodeFile>(ctx, mb, arPath, offset, lazy);
@@ -2169,6 +2181,8 @@ void LinkerDriver::loadFiles() {
         bool lazy = !job.inWholeArchive;
         for (const auto &[mb, offset] : members) {
           auto mm = identify_magic(mb.getBuffer());
+          if (isCasm(mb))
+            mm = file_magic::elf_relocatable;
           if (mm == file_magic::elf_relocatable || mm == file_magic::bitcode ||
               job.inWholeArchive)
             job.out.push_back(makeFile(mb, mm, job.path, offset, lazy));

@@ -27,6 +27,7 @@ configure_lit_site_cfg(
   "CURRENT_LIBS_DIR"
   "CURRENT_TOOLS_DIR"
   "LLD_SOURCE_DIR"
+  "LLD_CASM_TOOLS_DIR"
   )
 configure_lit_site_cfg(
   ${CMAKE_CURRENT_SOURCE_DIR}/Unit/lit.site.cfg.py.in

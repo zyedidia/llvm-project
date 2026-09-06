@@ -171,10 +171,14 @@ private:
   mutable SmallString<0> nameForScriptCache;
 };
 
+struct CasmFile;
+
 class ELFFileBase : public InputFile {
 public:
   ELFFileBase(Ctx &ctx, Kind k, ELFKind ekind, MemoryBufferRef m);
   ~ELFFileBase();
+  // The Casm module this file was lowered from, when it was.
+  CasmFile *casm = nullptr;
   static bool classof(const InputFile *f) { return f->isElf(); }
 
   void init();

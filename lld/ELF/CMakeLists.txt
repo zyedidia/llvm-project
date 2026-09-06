@@ -39,6 +39,7 @@ add_lld_library(lldELF
   ARMErrataFix.cpp
   BPSectionOrderer.cpp
   CallGraphSort.cpp
+  Casm.cpp
   DWARF.cpp
   Driver.cpp
   DriverUtils.cpp
@@ -88,3 +89,17 @@ add_lld_library(lldELF
   ELFOptionsTableGen
   intrinsics_gen
   )
+
+# libcasm, from the casm repository, lets lld read Casm modules. It has no
+# LLVM dependency and is compiled from its sources into lldELF, so lld's
+# export set is unchanged.
+if(LLD_CASM_DIR)
+  file(GLOB lld_casm_sources CONFIGURE_DEPENDS ${LLD_CASM_DIR}/lib/casm/*.cpp)
+  target_sources(lldELF PRIVATE ${lld_casm_sources})
+  target_include_directories(lldELF PRIVATE ${LLD_CASM_DIR}/include)
+  target_compile_definitions(lldELF PRIVATE LLD_CASM=1)
+  if(LLVM_ENABLE_ZSTD)
+    set_source_files_properties(${lld_casm_sources} PROPERTIES
+      COMPILE_DEFINITIONS CASM_HAVE_ZSTD=1)
+  endif()
+endif()

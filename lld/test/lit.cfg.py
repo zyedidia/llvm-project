@@ -59,6 +59,17 @@ tool_patterns = [
 
 llvm_config.add_tool_substitutions(tool_patterns)
 
+# The casm tools, for tests that link Casm modules. An lld built without
+# libcasm has no tools directory and those tests are unsupported.
+if config.casm_tools_dir and os.access(
+    os.path.join(config.casm_tools_dir, "casm-as"), os.X_OK
+):
+    config.available_features.add("casm")
+    for tool in ["casm-as", "casm-obj", "casm-merge", "casm-dump"]:
+        config.substitutions.append(
+            ("%" + tool, os.path.join(config.casm_tools_dir, tool))
+        )
+
 # LLD tests tend to be flaky on NetBSD, so add some retries.
 # We don't do this on other platforms because it's slower.
 if platform.system() in ["NetBSD"]:

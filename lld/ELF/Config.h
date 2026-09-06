@@ -648,6 +648,8 @@ struct InStruct {
   std::unique_ptr<SyntheticSection> riscvAttributes;
 };
 
+struct CasmFile;
+
 struct Ctx : CommonLinkerContext {
   Config arg;
   LinkerDriver driver;
@@ -717,6 +719,10 @@ struct Ctx : CommonLinkerContext {
   SmallVector<Defined *, 0> irelativeSyms;
 
   SmallVector<std::unique_ptr<MemoryBuffer>> memoryBuffers;
+  // Casm modules among the inputs, each lowered to an object file, whether
+  // or not the link extracted it.
+  SmallVector<std::unique_ptr<CasmFile>, 0> casmFiles;
+  std::mutex casmMutex;
   SmallVector<ELFFileBase *, 0> objectFiles;
   SmallVector<SharedFile *, 0> sharedFiles;
   SmallVector<BinaryFile *, 0> binaryFiles;
