@@ -23,9 +23,9 @@ namespace lld::elf {
 struct Ctx;
 class ELFFileBase;
 
-// A module lowered for the link: the module, the session that lowers it and
-// the object of its last lowering behind impl, the ELF bytes the input path
-// parsed, and the file built from them.
+// A module lowered for the link: the module, the session that lowers it,
+// the object of its last lowering and the relaxation state behind impl, the
+// ELF bytes the input path parsed, and the file built from them.
 struct CasmFile {
   CasmFile();
   ~CasmFile();
@@ -42,6 +42,17 @@ bool isCasm(llvm::MemoryBufferRef mb);
 // result's elf buffer is what the input path parses. Fatal on a module lld
 // cannot read or lower. Safe to call from several threads.
 CasmFile *lowerCasm(Ctx &ctx, llvm::MemoryBufferRef mb);
+
+// Lower every module again against the addresses the link has assigned,
+// and patch its sections, relocations and symbols in place. Returns
+// whether any section changed size or any symbol moved, which is what the
+// address fixpoint iterates on. Errors when a candidate moves a field the scan
+// made a dynamic relocation for, since the writer emits that where the scan saw
+// it.
+bool relaxCasm(Ctx &ctx, int pass);
+
+// After the fixpoint: write the relax report when one was asked for.
+void finalizeCasm(Ctx &ctx);
 
 } // namespace lld::elf
 

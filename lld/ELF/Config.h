@@ -264,6 +264,7 @@ struct Config {
   llvm::StringRef ltoObjPath;
   llvm::StringRef ltoSampleProfile;
   llvm::StringRef mapFile;
+  llvm::StringRef casmRelaxReport;
   llvm::StringRef outputFile;
   llvm::StringRef optRemarksFilename;
   std::optional<uint64_t> optRemarksHotnessThreshold = 0;

@@ -156,7 +156,7 @@ private:
   int current = 0;
   int next = 0;
 };
-}
+} // namespace
 
 // Returns true if section S is subject of ICF.
 static bool isEligible(InputSection *s) {
@@ -173,6 +173,13 @@ static bool isEligible(InputSection *s) {
   // so we don't consider them for ICF individually.
   if (s->flags & SHF_LINK_ORDER)
     return false;
+
+  // A Casm section's bytes follow the addresses the link assigns, so
+  // equality at the widest lowering says nothing about equality after
+  // relaxation.
+  if (auto *f = dyn_cast_or_null<ELFFileBase>(s->file))
+    if (f->casm)
+      return false;
 
   // Don't merge synthetic sections as their Data member is not valid and empty.
   // The Data member needs to be valid for ICF as it is used by ICF to determine

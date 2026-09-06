@@ -11,6 +11,7 @@
 #include "ARMErrataFix.h"
 #include "BPSectionOrderer.h"
 #include "CallGraphSort.h"
+#include "Casm.h"
 #include "Config.h"
 #include "InputFiles.h"
 #include "LinkerScript.h"
@@ -1526,6 +1527,8 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
     bool changed = ctx.target->needsThunks
                        ? tc.createThunks(pass, ctx.outputSections)
                        : ctx.target->relaxOnce(pass);
+    if (!ctx.casmFiles.empty())
+      changed |= relaxCasm(ctx, pass);
     bool spilled = ctx.script->spillSections();
     changed |= spilled;
     ++pass;
@@ -1623,8 +1626,10 @@ template <class ELFT> void Writer<ELFT>::finalizeAddressDependentContent() {
     if (errCount(ctx))
       break;
   }
-  if (!ctx.arg.relocatable)
+  if (!ctx.arg.relocatable) {
     ctx.target->finalizeRelax(pass);
+    finalizeCasm(ctx);
+  }
 
   if (ctx.arg.relocatable)
     for (OutputSection *sec : ctx.outputSections)

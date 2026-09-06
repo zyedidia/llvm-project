@@ -65,7 +65,7 @@ if config.casm_tools_dir and os.access(
     os.path.join(config.casm_tools_dir, "casm-as"), os.X_OK
 ):
     config.available_features.add("casm")
-    for tool in ["casm-as", "casm-obj", "casm-merge", "casm-dump"]:
+    for tool in ["casm-as", "casm-obj", "casm-merge", "casm-dump", "casm-relax"]:
         config.substitutions.append(
             ("%" + tool, os.path.join(config.casm_tools_dir, tool))
         )

@@ -1510,6 +1510,7 @@ static void readConfigs(Ctx &ctx, opt::InputArgList &args) {
       args.hasFlag(OPT_lto_unique_basic_block_section_names,
                    OPT_no_lto_unique_basic_block_section_names, false);
   ctx.arg.mapFile = args.getLastArgValue(OPT_Map);
+  ctx.arg.casmRelaxReport = args.getLastArgValue(OPT_casm_relax_report);
   ctx.arg.mipsGotSize = args::getInteger(args, OPT_mips_got_size, 0xfff0);
   ctx.arg.mergeArmExidx =
       args.hasFlag(OPT_merge_exidx_entries, OPT_no_merge_exidx_entries, true);

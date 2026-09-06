@@ -326,6 +326,9 @@ def m: JoinedOrSeparate<["-"], "m">, HelpText<"Set target emulation">;
 
 defm Map: Eq<"Map", "Print a link map to the specified file">;
 
+defm casm_relax_report: EEq<"casm-relax-report",
+    "Write the candidate each Casm relaxation site took to the specified file">;
+
 defm merge_exidx_entries: B<"merge-exidx-entries",
     "Enable merging .ARM.exidx entries (default)",
     "Disable merging .ARM.exidx entries">;

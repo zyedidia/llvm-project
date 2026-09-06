@@ -24,11 +24,12 @@
 # RUN: llvm-objdump -d --no-show-raw-insn mixed.exe | tail -n +3 > mixed.dis
 # RUN: diff casm.dis mixed.dis
 
-## A relocatable link keeps the module's relocations.
+## A relocatable link keeps the module's relocations, each naming its
+## symbol, as every lowering for a link does.
 # RUN: ld.lld -r a.casm b.casm -o r.o
 # RUN: llvm-readelf -r r.o | FileCheck --check-prefix=RELOC %s
 # RELOC: R_X86_64_PLT32 {{.*}} pong
-# RELOC: R_X86_64_PC32 {{.*}} .rodata
+# RELOC: R_X86_64_PC32 {{.*}} msg
 
 #--- a.s
 	.text
