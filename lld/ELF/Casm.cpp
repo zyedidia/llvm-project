@@ -109,10 +109,10 @@ CasmFile *elf::lowerCasm(Ctx &ctx, MemoryBufferRef mb) {
 namespace {
 
 // The expression a candidate's relocation takes, for the types a
-// candidate may switch to: the absolute and PC-relative fields, with a
-// PLT reference to a symbol the link binds directly a plain PC-relative
-// one, as the scan decides. Any other type keeps what the scan gave it at
-// the widest lowering.
+// candidate may switch to: the absolute, PC-relative and thread-pointer-
+// relative fields, with a PLT reference to a symbol the link binds
+// directly a plain PC-relative one, as the scan decides. Any other type
+// keeps what the scan gave it at the widest lowering.
 bool exprFor(RelType type, const Symbol &sym, RelExpr &expr) {
   switch (type) {
   case R_X86_64_8:
@@ -131,9 +131,24 @@ bool exprFor(RelType type, const Symbol &sym, RelExpr &expr) {
   case R_X86_64_PLT32:
     expr = sym.isPreemptible || sym.isGnuIFunc() ? R_PLT_PC : R_PC;
     return true;
+  case R_X86_64_TPOFF32:
+  case R_X86_64_TPOFF64:
+    expr = R_TPREL;
+    return true;
   default:
     return false;
   }
+}
+
+// The offset of a TLS symbol from the thread pointer under x86-64's
+// layout, where the static TLS blocks and their alignment padding end at
+// the thread pointer. The program header's own fields are filled in after
+// the address fixpoint, so its sections give the segment's extent.
+int64_t tpOffset(Ctx &ctx, const Symbol &s) {
+  PhdrEntry *tls = ctx.tlsPhdr;
+  uint64_t vaddr = tls->firstSec->addr;
+  uint64_t memsz = tls->lastSec->addr + tls->lastSec->size - vaddr;
+  return s.getVA(ctx) - memsz - ((-vaddr - memsz) & (tls->p_align - 1));
 }
 
 // Whether sec is one of file's own input sections.
@@ -263,12 +278,14 @@ bool relaxFile(Ctx &ctx, CasmFile &cf, const DynOffsets &dyn) {
     return false;
 
   // What the link knows: where each section is, where each symbol is
-  // that the link placed rather than the module, and which globals bind
-  // to the module's own definition.
+  // that the link placed rather than the module, which globals bind to
+  // the module's own definition, and each TLS symbol's offset from the
+  // thread pointer.
   casm::Placement p;
   p.SectionBases.assign(ns, std::nullopt);
   p.SymbolAddrs.assign(impl.object.Symbols.size(), std::nullopt);
   p.SymbolBinds.assign(impl.object.Symbols.size(), std::nullopt);
+  p.SymbolTPOffsets.assign(impl.object.Symbols.size(), std::nullopt);
   for (size_t i = 0; i < ns; ++i) {
     InputSectionBase *isec = sectionOf(i);
     if (isec && (isec->flags & SHF_ALLOC) && isec->getOutputSection())
@@ -282,16 +299,21 @@ bool relaxFile(Ctx &ctx, CasmFile &cf, const DynOffsets &dyn) {
     auto *d = dyn_cast<Defined>(&s);
     // A definition in one of the module's own sections is where the
     // module puts it, unless the section is merged entry by entry.
-    if (d && d->file == file && (!d->section || ownSection(d->section, file)) &&
-        !isa_and_nonnull<MergeInputSection>(d->section)) {
-      if (y.Binding != STB_LOCAL)
-        p.SymbolBinds[i] = !s.isPreemptible;
-      continue;
-    }
-    if (s.isPreemptible || s.isGnuIFunc())
-      continue;
-    if (d || s.isUndefined())
+    bool own = d && d->file == file &&
+               (!d->section || ownSection(d->section, file)) &&
+               !isa_and_nonnull<MergeInputSection>(d->section);
+    if (own && y.Binding != STB_LOCAL)
+      p.SymbolBinds[i] = !s.isPreemptible;
+    // A reference the link does not bind to the definition reaches the
+    // PLT entry, which is the address a PLT32 resolves to.
+    if ((s.isPreemptible || s.isGnuIFunc()) && s.isInPlt(ctx))
+      p.SymbolAddrs[i] = s.getPltVA(ctx);
+    else if (!own && !s.isPreemptible && !s.isGnuIFunc() &&
+             (d || s.isUndefined()))
       p.SymbolAddrs[i] = s.getVA(ctx);
+    if (d && s.type == STT_TLS && !s.isPreemptible && ctx.tlsPhdr &&
+        ctx.tlsPhdr->firstSec)
+      p.SymbolTPOffsets[i] = tpOffset(ctx, s);
   }
 
   casm::Object next;
