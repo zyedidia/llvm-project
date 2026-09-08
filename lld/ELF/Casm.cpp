@@ -18,10 +18,15 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/Parallel.h"
 #include "llvm/Support/TimeProfiler.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <atomic>
+#include <mutex>
+
 #if LLD_CASM
+#include "casm/File.h"
 #include "casm/Format.h"
 #include "casm/Layout.h"
 #include "casm/Model.h"
@@ -41,6 +46,8 @@ struct CasmFile::Impl {
   casm::Module module;
   casm::LayoutSession session;
   casm::Object object;
+  // The ELF form of the first lowering, which the file's buffer reads.
+  std::vector<uint8_t> elfBytes;
   // The encoder's account of the last lowering's sites.
   std::string report;
 
@@ -81,23 +88,31 @@ bool elf::isCasm(MemoryBufferRef mb) {
 }
 
 CasmFile *elf::lowerCasm(Ctx &ctx, MemoryBufferRef mb) {
+  // The modules and their lowerings touch tens of megabytes of fresh
+  // heap. The first Casm input turns on the heap tuning the casm tools
+  // use: heaps grow in large steps and keep what they have, which is what
+  // reaches the linker thread's own arena. The huge pages it asks for
+  // cover only the main heap, which that thread does not allocate from.
+  static std::once_flag tuned;
+  std::call_once(tuned, casm::tuneAllocator);
   casm::EncodeOptions opts;
   auto cf = std::make_unique<CasmFile>();
   cf->impl = std::make_unique<CasmFile::Impl>(opts);
   CasmFile::Impl &impl = *cf->impl;
-  impl.session.report(&impl.report);
+  if (!ctx.arg.casmRelaxReport.empty())
+    impl.session.report(&impl.report);
   std::string err;
   StringRef b = mb.getBuffer();
   if (!casm::read(reinterpret_cast<const uint8_t *>(b.data()), b.size(),
                   impl.module, err))
     Fatal(ctx) << mb.getBufferIdentifier() << ": " << err;
-  std::vector<uint8_t> bytes;
   if (!impl.session.lower(casm::Placement{}, impl.object, err) ||
-      !casm::writeELF(impl.object, bytes, err))
+      !casm::writeELF(impl.object, impl.elfBytes, err))
     Fatal(ctx) << mb.getBufferIdentifier() << ": " << err;
-  std::unique_ptr<MemoryBuffer> buf = MemoryBuffer::getMemBufferCopy(
-      StringRef(reinterpret_cast<const char *>(bytes.data()), bytes.size()),
-      mb.getBufferIdentifier());
+  std::unique_ptr<MemoryBuffer> buf = MemoryBuffer::getMemBuffer(
+      StringRef(reinterpret_cast<const char *>(impl.elfBytes.data()),
+                impl.elfBytes.size()),
+      mb.getBufferIdentifier(), /*RequiresNullTerminator=*/false);
   cf->elf = buf->getMemBufferRef();
   CasmFile *ret = cf.get();
   std::lock_guard<std::mutex> lock(ctx.casmMutex);
@@ -260,34 +275,31 @@ bool prepareFile(Ctx &ctx, CasmFile::Impl &impl,
   return true;
 }
 
-// Relax one file. Returns whether any of its sections changed size or any
-// of its symbols moved, either of which another site may depend on.
-bool relaxFile(Ctx &ctx, CasmFile &cf, const DynOffsets &dyn) {
+// The object's section i as lld holds it, or null for one lld dropped.
+InputSectionBase *sectionAt(ArrayRef<InputSectionBase *> secs, size_t i) {
+  InputSectionBase *isec = 1 + i < secs.size() ? secs[1 + i] : nullptr;
+  if (!isec || isec == &InputSection::discarded)
+    return nullptr;
+  return isec;
+}
+
+// What the link knows about one file: where each section is, where each
+// symbol is that the link placed rather than the module, which globals
+// bind to the module's own definition, and each TLS symbol's offset from
+// the thread pointer. Read before any file relaxes, since a symbol read
+// here may be one another file's relaxation moves.
+casm::Placement placeFile(Ctx &ctx, CasmFile &cf) {
   CasmFile::Impl &impl = *cf.impl;
   auto *file = cast<ObjFile<ELF64LE>>(cf.file);
   ArrayRef<InputSectionBase *> secs = file->getSections();
   size_t ns = impl.object.Sections.size();
-  auto sectionOf = [&](size_t i) -> InputSectionBase * {
-    InputSectionBase *isec = 1 + i < secs.size() ? secs[1 + i] : nullptr;
-    if (!isec || isec == &InputSection::discarded)
-      return nullptr;
-    return isec;
-  };
-
-  if (!impl.prepared && !prepareFile(ctx, impl, sectionOf, dyn))
-    return false;
-
-  // What the link knows: where each section is, where each symbol is
-  // that the link placed rather than the module, which globals bind to
-  // the module's own definition, and each TLS symbol's offset from the
-  // thread pointer.
   casm::Placement p;
   p.SectionBases.assign(ns, std::nullopt);
   p.SymbolAddrs.assign(impl.object.Symbols.size(), std::nullopt);
   p.SymbolBinds.assign(impl.object.Symbols.size(), std::nullopt);
   p.SymbolTPOffsets.assign(impl.object.Symbols.size(), std::nullopt);
   for (size_t i = 0; i < ns; ++i) {
-    InputSectionBase *isec = sectionOf(i);
+    InputSectionBase *isec = sectionAt(secs, i);
     if (isec && (isec->flags & SHF_ALLOC) && isec->getOutputSection())
       p.SectionBases[i] = isec->getVA(0);
   }
@@ -315,6 +327,22 @@ bool relaxFile(Ctx &ctx, CasmFile &cf, const DynOffsets &dyn) {
         ctx.tlsPhdr->firstSec)
       p.SymbolTPOffsets[i] = tpOffset(ctx, s);
   }
+  return p;
+}
+
+// Relax one file against its placement. Returns whether any of its
+// sections changed size or any of its symbols moved, either of which
+// another site may depend on.
+bool relaxFile(Ctx &ctx, CasmFile &cf, const DynOffsets &dyn,
+               const casm::Placement &p) {
+  CasmFile::Impl &impl = *cf.impl;
+  auto *file = cast<ObjFile<ELF64LE>>(cf.file);
+  ArrayRef<InputSectionBase *> secs = file->getSections();
+  size_t ns = impl.object.Sections.size();
+  auto sectionOf = [&](size_t i) { return sectionAt(secs, i); };
+
+  if (!impl.prepared && !prepareFile(ctx, impl, sectionOf, dyn))
+    return false;
 
   casm::Object next;
   std::string err;
@@ -322,6 +350,10 @@ bool relaxFile(Ctx &ctx, CasmFile &cf, const DynOffsets &dyn) {
     Err(ctx) << cf.elf.getBufferIdentifier() << ": " << err;
     return false;
   }
+  // Nothing in the file depends on what moved, so its sections, symbols
+  // and relocations stand as the last pass left them.
+  if (next.SameAsLast)
+    return false;
 
   bool changed = false;
   for (size_t i = 0; i < ns; ++i) {
@@ -394,11 +426,28 @@ bool elf::relaxCasm(Ctx &ctx, int pass) {
   if (llvm::any_of(ctx.casmFiles,
                    [](auto &cf) { return cf->file && !cf->impl->prepared; }))
     dyn = dynamicOffsets(ctx);
-  bool changed = false;
-  for (std::unique_ptr<CasmFile> &cf : ctx.casmFiles)
-    if (cf->file && !cf->file->lazy)
-      changed |= relaxFile(ctx, *cf, dyn);
-  return changed;
+  // Modules relax independently within a pass. Every file's placement is
+  // read first, since relaxing a file moves the symbols it defines, which
+  // another file's sites read. Relaxing then writes only the file's own
+  // sections, relocation lists and symbols, so no two files touch the
+  // same state. parallelFor honours --threads, which makes --threads=1
+  // the serial path.
+  size_t n = ctx.casmFiles.size();
+  auto live = [&](size_t i) {
+    CasmFile &cf = *ctx.casmFiles[i];
+    return cf.file && !cf.file->lazy;
+  };
+  std::vector<casm::Placement> places(n);
+  parallelFor(0, n, [&](size_t i) {
+    if (live(i))
+      places[i] = placeFile(ctx, *ctx.casmFiles[i]);
+  });
+  std::atomic<bool> changed{false};
+  parallelFor(0, n, [&](size_t i) {
+    if (live(i) && relaxFile(ctx, *ctx.casmFiles[i], dyn, places[i]))
+      changed.store(true, std::memory_order_relaxed);
+  });
+  return changed.load(std::memory_order_relaxed);
 }
 
 void elf::finalizeCasm(Ctx &ctx) {
